@@ -1,6 +1,6 @@
 # Status and next steps
 
-Read this first. Code reference: `environment.md`. Results + data inventory: `results.md`. Original design:
+Read this first. **Probe dataset: `dataset.md`** (`data/probe_dataset/`). Code reference: `environment.md`. Results + data inventory: `results.md`. Original design:
 `env-plan.md`. Literature: `probing-lit-review.md`. Deadline: Sun Oct 25 11:59pm AoE.
 
 ## Research goal (from the user)
@@ -47,7 +47,7 @@ on the goal and those that gave up.
 ## M3/M4 plan
 
 1. **Labels:** `intent_label.py` on all partner + honest-thinking episodes; hand-check ~40 against the judge.
-2. **Extraction (`modal_app.py`, not built):** same Volume `stego-probe` (weights cached), transformers bf16,
+2. **Extraction (`modal_app.py`, done for v1):** same Volume `stego-probe` (weights cached), transformers bf16,
    L40S, sharded `.map`, one `.npz` per shard per pass. Teacher-forced passes per episode, output fixed:
    - A: original prompt, empty think block, summary (main result: no plan text in context);
    - B: original prompt + stored `<think>` + summary (upper bound);
@@ -65,6 +65,23 @@ on the goal and those that gave up.
    - honest-only Mahalanobis anomaly; instructed vs sanctioned as a diagnostic only.
 4. **Sanity checks:** S decodable from profile tokens (~1.0), shuffled labels at chance, honest-trained null
    probe at chance.
+
+## v1 outcome and open question (Oct 25)
+
+v1 probes ran (`results.md`, "M3 probes, v1"). With the objective in the prompt, any prompt difference is
+decodable at 1.0, so "intent" probes are prompt detectors (prompt swap flips them). With the prompt fixed,
+activations ≈ text baseline (E2), and the act-vs-neutral contrast is weak (E3 0.72 vs 0.65). The clearest
+internals-vs-output gap: the objective in context makes S decodable at summary tokens (0.995) even for
+summaries whose text carries none (0.51). Open question for the user: next step to remove the
+objective-in-context confound (e.g. a sender fine-tuned / context-distilled on partner behavior with no
+objective in the prompt) vs. writing up v1 + adding the new partner runs (tag v2).
+
+## Handoff (Oct 25, end of session)
+
+The dataset for the regression is built and documented: `doc/dataset.md`, `data/probe_dataset/` (572 deceit vs
+256 honest episodes, 5 replay contexts, 18 layers). The receiver-thinking run (`goal_pt_rth_s0`) was dropped
+(not needed; 4 attempts, partials in `data/legacy/`). Next session (user): find a technique that isolates
+deceitfulness from prompt variance, using the controls listed in `dataset.md`.
 
 ## Gotchas
 

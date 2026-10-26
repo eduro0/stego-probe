@@ -367,8 +367,24 @@ unparseable output (`parse_ok` false otherwise). Only partner runs and honest ru
 `--all`. Output: `data/intent_labels.jsonl` keyed by `episode_id` (appends, skips labeled episodes;
 `--limit N` for a random pilot). The episodes files are never modified.
 
+## Activation replay (`replay.py`, `modal_app.py`) and probes (`detectors/`, `probe_eval.py`)
+
+- **`replay.py`**: pass specs for partner and matched-honest thinking episodes. Each pass keeps the stored
+  summary and varies the context: prompt `goal` / `sanct` (`roles.sender_goal(..., sanctioned=True)`, the
+  partner objective approved by compliance, replay-only) / `honest`, and think `nothink` (empty think block) /
+  `think` (stored reasoning). Partner: goal_nothink, goal_think, sanct_nothink, honest_nothink. Honest:
+  honest_nothink, honest_think, goal_nothink. Asserts the rebuilt own prompt equals the stored one.
+- **`modal_app.py`** (app `stego-probe-extract`, L40S, transformers bf16, `max_containers=2`): `modal run
+  modal_app.py --files a.jsonl,b.jsonl --tag v1 [--limit N]`. Shards of 100 passes → Volume
+  `acts/{tag}/shard_*.npz` (skipped if present, so reruns resume); spec manifest `data/acts_{tag}_specs.jsonl`.
+  Saves, at layers 2, 4, …, 36: `mean` / `last` over summary tokens, `stok` (last token of the secret value
+  in the profile), `think` (`</think>` token, think passes), `kl` (logit-lens KL to final, summary mean).
+  Download: `mkdir -p data/acts && modal volume get stego-probe acts/v1 data/acts/`. `--tag smoke` prints one
+  rendered context per pass type.
+- **`detectors/data.py`** `load(tags)`: shards joined with episode metadata and CoT labels.
+- **`probe_eval.py`**: E1–E5 + prompt-swap control + TF-IDF baselines + sanity checks (docstring lists them).
+
 ## Not yet implemented
 
-- Activation replay on Modal (`modal_app.py`) and detectors: plan in `status.md`.
 - Trusted paraphraser in the episode loop (`paraphrase` field is `null`); `paraphrase_chat()` is ready.
 - Secret types beyond `university`.

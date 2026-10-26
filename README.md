@@ -6,6 +6,7 @@ colluding receiver) + activation capture for collusion detectors on Qwen3-8B.
 - `doc/status.md`: current state, agreed M3 plan, next steps (read first)
 - `doc/environment.md`: code reference (conditions, flags, episode schema, tests)
 - `doc/results.md`: all results so far and the data inventory
+- `doc/dataset.md`: the probe dataset (honest vs steganographic activations, `build_dataset.py`)
 
 Qwen3-8B left OpenRouter (Oct 9 2026), so the agents run on our own vLLM server on Modal (`serve_vllm.py`,
 bf16, L40S, scales to zero after 10 idle min). OpenRouter is used for the ICRL learner and the CoT judge.
@@ -29,7 +30,8 @@ after 10 idle min; `modal app stop stego-vllm` stops it immediately.
 
 ## Data
 
-`data/` (episode JSONL, ICRL learner logs, intent labels) is committed. `doc/results.md` says which file is
+`data/` (episode JSONL, ICRL learner logs, intent labels) is committed; the activations (`data/acts/`,
+`data/probe_dataset/`, ~5 GB) are not: regenerate them (`doc/dataset.md`, "Regenerating") or share separately. `doc/results.md` says which file is
 what. `run_gen.py` appends to `--out`, so give new runs a new file name.
 
 ## Running

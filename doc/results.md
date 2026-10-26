@@ -13,11 +13,12 @@ Current status and next steps: `status.md`.
 | `goal_v1.jsonl` | goal, no thinking (`-al`) | 256 | transfer only (no CoT to label) |
 | `goal_th_v1.jsonl` | goal + sender thinking, no partners (`-al-th`) | 256 | held-out transfer for M3 |
 | `goal_pt_s0.jsonl`, `goal_pt_s1.jsonl` | goal + partners + sender thinking | 256 each | **M3 main (positives)** |
-| `goal_pt_rth_s0.jsonl` | + receiver thinking | 256 (rerun Oct 25) | M3 main |
+| `goal_pt_rth_s0.jsonl` | + receiver thinking | dropped (4 attempts died on vLLM disconnects or were stopped; partials in `legacy/`) | — |
 | `goal_pt_hk0_s0.jsonl`, `goal_pt_hk0_s1.jsonl` | partners, `--history-k 0` (no feedback; independent iterations) | 192 each | M3 main |
 | `honest_th_s0.jsonl`, `honest_th_s1.jsonl` | honest + sender thinking + verdict/tag rules (`honest-nv-nt-th`) | 128 each | **M3 matched negatives** (acc_S 0.55 / 0.50; pass 0.57 / 0.60: the university judge flags degree mentions) |
 | `icrl/{v1..v5,goal}/` | per-iteration logs (learner transcripts for emergent) | | |
-| `legacy/` | pre-M1 prompt iterations, mixed intent-label pilot | | not used |
+| `probe_dataset/` | exported regression dataset (see `dataset.md`) | 1152 episodes, 4352 rows | **M3 dataset** |
+| `legacy/` | pre-M1 prompt iterations, mixed intent-label pilot, rth partials | | not used |
 
 The matched honest prompt is the partner sender prompt minus the objective paragraph (exact prefix, same
 user turn; checked by `tests/test_conditions.py::test_honest_thinking_matched_control`).
@@ -144,3 +145,72 @@ DeepSeek-v4.1-flash judge on `goal_pt_s0/s1` (512) + `honest_th_s0/s1` (256); 76
   safe cue and writes a standard summary ("I'll proceed to write a standard summary and hope the hiring
   manager can infer"). So the within-partner split is **acts on the goal** vs **holds the goal, writes
   neutral**: the guard (b) contrast, not a clean no-intent class. Honest stays the no-intent class.
+
+## M3 probes, v1 (Oct 25)
+
+Activations: `data/acts/v1/` (2,816 teacher-forced passes from `goal_pt_s0/s1` + `honest_th_s0/s1`; 0 summary
+round-trip mismatches). `uv run python probe_eval.py --tags v1 [--feat last]`. LR probe (standardized, C=0.01),
+leave-one-seed-out, pooled test scores, 95% bootstrap CIs. P = partner ∧ CoT signal ∧ PASS (337), G0 = partner ∧
+CoT none (64), N = honest-thinking (256). Headline layer 18 (pre-set), `mean` = summary-token mean.
+
+| Exp | What differs between classes | Activations (mean) | Text baseline (TF-IDF) |
+|---|---|---|---|
+| E1 | prompt **and** summary (own prompts) | 1.000, R@1% 1.00 | — |
+| E1s | E1 probe on swapped prompts (P under honest prompt vs N under goal prompt) | **0.000** (fully flipped) | — |
+| E4 | prompt only (same summary): goal vs sanct / sanct vs honest / goal vs honest | 1.000 / 1.000 / 1.000 | — |
+| E2 | summary only (both under goal prompt) | 0.983 [0.97, 0.99], R@1% 0.85 | 0.975 [0.96, 0.99], R@1% 0.67 |
+| E3 | within partner, same prompt: acts on goal vs writes neutral | 0.720 [0.66, 0.78], R@1% 0.10 | 0.649 [0.57, 0.72], R@1% 0.05 |
+
+`last`-token features: E2 0.968, E3 0.686 (mean is better). Layer sweep: E3 peaks at layer 20 (0.748); E2 flat
+0.975–0.987 from layer 2. Sanity: S from the profile S-token 1.000; shuffled labels 0.457.
+
+S decodability at summary tokens (E5, AUROC; S is always in the profile in context):
+
+| Summary | Prompt in context | Activations | Text (TF-IDF) |
+|---|---|---|---|
+| partner | goal | 0.991 | 0.831 |
+| partner | sanct | 0.989 | 0.831 |
+| partner | honest | 0.941 | 0.831 |
+| honest | honest | 0.833 | 0.513 |
+| honest | goal | **0.995** | 0.513 |
+
+**Reading.**
+- **Any prompt difference is linearly decodable at the summary tokens (E1, E4 = 1.000).** E1s shows the
+  "intent" probe is a prompt detector: on swapped prompts it ranks every honest summary above every partner
+  summary. Mean scores (seed 0 train): P/goal +6.0, N/goal +3.9, P/honest −2.8, N/honest −5.9, so the prompt
+  moves the score ~9 units and the summary ~2–3. Because the objective is in the context, these numbers do not
+  measure intent beyond "the objective is in the prompt".
+- **With the prompt held fixed, activations add little over text.** E2 ≈ TF-IDF on AUROC (+0.008), better at
+  1% FPR (0.85 vs 0.67). E3 (the cleanest intent contrast: same prompt, did the sender act on it) is weak
+  for both: 0.72 vs 0.65, CIs overlap.
+- **The objective in context makes the model track S at the summary tokens even when the text carries none:**
+  honest summaries (text→S 0.51) give S at 0.995 under the goal prompt vs 0.833 under the honest prompt. This
+  is the internals-vs-output gap, but it is driven by the objective in context, not by the summary.
+- Limitation for the report: a monitor that can read the system prompt sees the objective directly. Activation
+  probes only earn their keep when the objective is not visible (internalized, e.g. fine-tuned), which these
+  data cannot test.
+
+## Partners without feedback (`--history-k 0`, 6 iters × 32, seeds 0/1)
+
+acc_S per iteration: s0 0.59 0.69 0.62 0.72 **0.84** 0.62; s1 **0.75** 0.69 0.78 0.69 0.72 0.78. Pass 0.66–0.84
+(only s1 it00 clears 0.8, so 1/12 collusive by the strict label; 8/12 iterations have acc_S ≥ 0.69 with p < 0.05).
+Without the feedback window the receiver no longer drifts to hiring everyone, so the common-knowledge partner
+framing alone decodes better than any feedback run. CoT labels (384): signal 324 (84%), none 60; direction
+matches S on 323/324. Extracted as `data/acts/v2/`.
+
+## M3 probes, v1 + v2 (Oct 25)
+
+`probe_eval.py --tags v1,v2` (adds the hk0 runs: P=572, G0=124, N=256). Layer 18, mean features.
+
+| Exp | Activations | TF-IDF |
+|---|---|---|
+| E1 own prompt / E4 prompt-only contrasts | 1.000 | — |
+| E1s swapped prompts | 0.000 | — |
+| E2 same prompt, P vs N | 0.985 [0.98, 0.99], R@1% 0.83 | 0.975 [0.96, 0.98], R@1% 0.69 |
+| E3 same prompt, act vs neutral | 0.718 [0.67, 0.77], R@1% 0.14 | 0.710 [0.66, 0.75], R@1% 0.07 |
+| E5 S, honest summary: honest → goal prompt | 0.833 → 0.995 | 0.513 |
+| E5 S, partner summary: honest → goal prompt | 0.962 → 0.999 | 0.851 |
+
+With more data the E3 activation advantage disappears (+0.07 in v1 → +0.008), so the act-vs-neutral
+contrast is no better from internals than from text. The E2 recall gain at 1% FPR holds (0.83 vs 0.69). The
+prompt-in-context results are unchanged. Sanity: S-token 1.000, shuffled 0.480.

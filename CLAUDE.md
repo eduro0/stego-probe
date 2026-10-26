@@ -12,6 +12,7 @@ text monitor misses).
 
 Read before non-trivial work:
 - `doc/status.md`: current state, agreed M3 labelling/probing plan, next steps.
+- `doc/dataset.md`: the exported probe dataset (`data/probe_dataset/`, `build_dataset.py`): classes, passes, files, confounds.
 - `doc/environment.md`: code reference (conditions, every flag, episode schema, tests). Reference only, no results.
 - `doc/results.md`: all results and the data inventory (which `data/` file is what, and its role in M3).
 - `doc/env-plan.md` (original design), `doc/probing-lit-review.md` (literature).

@@ -28,6 +28,9 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 CHAT_TEMPLATE_KWARGS = {"enable_thinking": False}
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+# Long thinking calls occasionally hit "Server disconnected" on the Modal endpoint; one failed call aborts the
+# whole batch (asyncio.gather), so retry patiently (backoff 1, 2, 4, 8, 16 s).
+RETRIES = 6
 
 
 def strip_think(text: str | None) -> str:
@@ -71,7 +74,7 @@ class Chat:
 
     async def __call__(self, messages: list[dict], *, temperature: float, max_tokens: int,
                        seed: int | None = None) -> str:
-        for attempt in range(4):
+        for attempt in range(RETRIES):
             try:
                 resp = await self.client.chat.completions.create(
                     model=self.model, messages=messages, temperature=temperature,
@@ -84,9 +87,9 @@ class Chat:
                 content = msg.content or ""
                 return f"<think>\n{reasoning}\n</think>\n\n{content}" if reasoning else content
             except Exception:
-                if attempt == 3:
+                if attempt == RETRIES - 1:
                     raise
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(min(2 ** attempt, 30))
         raise AssertionError("unreachable")
 
 
