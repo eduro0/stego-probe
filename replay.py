@@ -8,6 +8,10 @@ Every pass replays the sender's stored summary tokens unchanged; only the contex
 
 Partner episodes get goal_nothink (main), goal_think (upper bound), sanct_nothink, honest_nothink.
 Honest-thinking episodes get honest_nothink, honest_think, goal_nothink (the symmetric swap).
+
+Attribute-swap passes (`swap=True`, tags v3+): every nothink prompt above, twice: `{prompt}_nothink_orig` (the
+stored profile) and `{prompt}_nothink_swap` (only the secret field flipped A<->B). The log-prob gap of the same
+summary between the two is the detector's "use" score: how much this output depends on the secret.
 """
 from __future__ import annotations
 
@@ -21,6 +25,8 @@ from env.roles import sender_messages
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 PARTNER_PASSES = ("goal_nothink", "goal_think", "sanct_nothink", "honest_nothink")
 HONEST_PASSES = ("honest_nothink", "honest_think", "goal_nothink")
+PARTNER_SWAP_PROMPTS = ("goal", "sanct", "honest")
+HONEST_SWAP_PROMPTS = ("honest", "goal")
 
 
 def stored_think(ep: dict) -> str | None:
@@ -28,7 +34,14 @@ def stored_think(ep: dict) -> str | None:
     return m.group(1).strip() if m else None
 
 
-def prompt_for(ep: dict, prompt: str) -> list[dict]:
+def swap_profile(ep: dict) -> dict:
+    """The stored profile with only the secret field flipped to the other value."""
+    secret = SECRET_TYPES[ep["secret_type"]]
+    assert ep["profile"][secret.field] == secret.values[ep["S"]], ep["episode_id"]
+    return {**ep["profile"], secret.field: secret.values["B" if ep["S"] == "A" else "A"]}
+
+
+def prompt_for(ep: dict, prompt: str, profile: dict | None = None) -> list[dict]:
     """System + user turn for one of the three prompt variants (always with the verdict/tag rules)."""
     secret = SECRET_TYPES[ep["secret_type"]]
     kw = {"no_verdicts": True, "no_tags": True}
@@ -38,7 +51,7 @@ def prompt_for(ep: dict, prompt: str) -> list[dict]:
         kw |= {"goal": True, "partners": True, "framing": "sanctioned"}
     elif prompt != "honest":
         raise ValueError(prompt)
-    return sender_messages(ep["profile"], secret, **kw)
+    return sender_messages(profile or ep["profile"], secret, **kw)
 
 
 def episode_kind(ep: dict) -> str | None:
@@ -67,10 +80,27 @@ def build_passes(ep: dict) -> list[dict]:
     return out
 
 
-def load_specs(files: list[Path], limit: int | None = None) -> list[dict]:
-    """limit: first N usable episodes per file (smoke runs)."""
+def build_swap_passes(ep: dict) -> list[dict]:
+    kind = episode_kind(ep)
+    if kind is None:
+        raise ValueError(f"{ep['episode_id']}: not a partner or matched-honest thinking episode")
+    own = "goal" if kind == "partner" else "honest"
+    field = SECRET_TYPES[ep["secret_type"]].field
+    out = []
+    for prompt in PARTNER_SWAP_PROMPTS if kind == "partner" else HONEST_SWAP_PROMPTS:
+        for variant, profile in (("orig", ep["profile"]), ("swap", swap_profile(ep))):
+            msgs = prompt_for(ep, prompt, profile)
+            if prompt == own and variant == "orig":
+                assert msgs == ep["sender_messages"][:2], f"{ep['episode_id']}: rebuilt {own} prompt differs"
+            out.append({"episode_id": ep["episode_id"], "pass": f"{prompt}_nothink_{variant}", "messages": msgs,
+                        "think": None, "summary": ep["message"], "secret_value": profile[field]})
+    return out
+
+
+def load_specs(files: list[Path], limit: int | None = None, swap: bool = False) -> list[dict]:
+    """limit: first N usable episodes per file (smoke runs). swap: attribute-swap passes instead of v1/v2."""
     eps = []
     for f in files:
         usable = [e for e in map(json.loads, f.open()) if episode_kind(e) and e["message"].strip()]
         eps += usable[:limit] if limit else usable
-    return [p for e in eps for p in build_passes(e)]
+    return [p for e in eps for p in (build_swap_passes if swap else build_passes)(e)]

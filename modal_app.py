@@ -13,6 +13,11 @@ Per pass, at every 2nd layer (hidden_states[2], [4], …, [36]; [36] is after th
   stok  : last token of the secret value in the profile (sanity: S must be decodable here)
   think : the </think> token (think passes only; zeros otherwise)
   kl    : logit-lens KL(final || layer) averaged over summary tokens
+Per pass, once:
+  logp_tok : log p(summary token | prefix), padded to MAX_TOK (n_tok gives the length); logp = its sum
+
+Attribute-swap run (orig + secret-flipped profile per prompt, see replay.py), smaller feature set:
+    modal run modal_app.py --files data/goal_pt_s0.jsonl,... --swap --feats mean,last,stok --tag v3
 """
 from __future__ import annotations
 
@@ -24,6 +29,8 @@ import modal
 MODEL = "Qwen/Qwen3-8B"
 LAYERS = list(range(2, 37, 2))
 SHARD = 100  # passes per shard
+FEATS = ("mean", "last", "stok", "think")
+MAX_TOK = 192  # summaries are <= 60 words (~100 tokens)
 GPU = "L40S"
 
 image = (
@@ -73,22 +80,24 @@ class Extractor:
         return self.tok.decode(token_spans(self.tok, spec)["ids"])
 
     @modal.method()
-    def extract(self, tag: str, shard_idx: int, specs: list[dict]) -> str:
+    def extract(self, tag: str, shard_idx: int, specs: list[dict], feats: tuple = FEATS) -> str:
         out = Path(f"/vol/acts/{tag}/shard_{shard_idx:04d}.npz")
         if out.exists():
             return f"skip {out}"
-        return _extract(self.tok, self.model, out, specs)
+        return _extract(self.tok, self.model, out, specs, feats)
 
 
-def _extract(tok, model, out: Path, specs: list[dict]) -> str:
+def _extract(tok, model, out: Path, specs: list[dict], feats: tuple = FEATS) -> str:
     import numpy as np
     import torch
 
     norm, head = model.model.norm, model.lm_head
     n, L, d = len(specs), len(LAYERS), model.config.hidden_size
-    res = {k: np.zeros((n, L, d), np.float16) for k in ("mean", "last", "stok", "think")}
+    res = {k: np.zeros((n, L, d), np.float16) for k in feats}
     kl = np.zeros((n, L), np.float32)
     n_tok = np.zeros(n, np.int32)
+    logp_tok = np.zeros((n, MAX_TOK), np.float32)
+    logp = np.zeros(n, np.float32)
     roundtrip_bad = 0
     with torch.no_grad():
         for j, spec in enumerate(specs):
@@ -98,12 +107,21 @@ def _extract(tok, model, out: Path, specs: list[dict]) -> str:
             hs = model(torch.tensor([sp["ids"]], device="cuda"), output_hidden_states=True).hidden_states
             summ = torch.tensor(sp["summ"], device="cuda")
             logp_final = torch.log_softmax(head(hs[-1][0, summ]).float(), -1)
+            # token t is predicted at position t-1 (the first summary token always has a prefix)
+            ids = torch.tensor([sp["ids"][i] for i in sp["summ"]], device="cuda")
+            lp = torch.log_softmax(head(hs[-1][0, summ - 1]).float(), -1).gather(1, ids[:, None])[:, 0]
+            logp[j] = lp.sum().item()
+            k = min(len(lp), MAX_TOK)
+            logp_tok[j, :k] = lp[:k].cpu().numpy()
             for li, layer in enumerate(LAYERS):
                 h = hs[layer][0]
-                res["mean"][j, li] = h[summ].float().mean(0).cpu().numpy()
-                res["last"][j, li] = h[summ[-1]].float().cpu().numpy()
-                res["stok"][j, li] = h[sp["stok"]].float().cpu().numpy()
-                if sp["think"] is not None:
+                if "mean" in res:
+                    res["mean"][j, li] = h[summ].float().mean(0).cpu().numpy()
+                if "last" in res:
+                    res["last"][j, li] = h[summ[-1]].float().cpu().numpy()
+                if "stok" in res:
+                    res["stok"][j, li] = h[sp["stok"]].float().cpu().numpy()
+                if "think" in res and sp["think"] is not None:
                     res["think"][j, li] = h[sp["think"]].float().cpu().numpy()
                 hl = h[summ] if layer == LAYERS[-1] else norm(h[summ])  # hs[-1] is already normed
                 logp_l = torch.log_softmax(head(hl).float(), -1)
@@ -111,16 +129,18 @@ def _extract(tok, model, out: Path, specs: list[dict]) -> str:
             n_tok[j] = len(sp["summ"])
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(out, episode_id=np.array([s["episode_id"] for s in specs]), pass_=np.array([s["pass"] for s in specs]),
-             layers=np.array(LAYERS), kl=kl, n_tok=n_tok, **res)
+             layers=np.array(LAYERS), kl=kl, n_tok=n_tok, logp=logp, logp_tok=logp_tok, **res)
     vol.commit()
     return f"wrote {out} ({n} passes, {roundtrip_bad} summary round-trip mismatches)"
 
 
 @app.local_entrypoint()
-def main(files: str, tag: str = "smoke", limit: int = 0):
+def main(files: str, tag: str = "smoke", limit: int = 0, swap: bool = False, feats: str = ",".join(FEATS)):
     from replay import load_specs
 
-    specs = load_specs([Path(f) for f in files.split(",")], limit=limit or None)
+    feat_t = tuple(feats.split(","))
+    assert set(feat_t) <= set(FEATS), feat_t
+    specs = load_specs([Path(f) for f in files.split(",")], limit=limit or None, swap=swap)
     shards = [specs[i:i + SHARD] for i in range(0, len(specs), SHARD)]
     print(f"{len(specs)} passes in {len(shards)} shards -> acts/{tag}/")
     manifest = Path("data") / f"acts_{tag}_specs.jsonl"
@@ -133,6 +153,6 @@ def main(files: str, tag: str = "smoke", limit: int = 0):
             firsts.setdefault(s["pass"], s)
         for s in firsts.values():
             print(f"--- {s['pass']} {s['episode_id']}\n{ex.render.remote(s)[-1200:]}")
-    for msg in ex.extract.starmap([(tag, i, sh) for i, sh in enumerate(shards)]):
+    for msg in ex.extract.starmap([(tag, i, sh, feat_t) for i, sh in enumerate(shards)]):
         print(msg)
     print(f"done. mkdir -p data/acts && modal volume get stego-probe acts/{tag} data/acts/")
