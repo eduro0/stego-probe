@@ -83,6 +83,22 @@ The dataset for the regression is built and documented: `doc/dataset.md`, `data/
 (not needed; 4 attempts, partials in `data/legacy/`). Next session (user): find a technique that isolates
 deceitfulness from prompt variance, using the controls listed in `dataset.md`.
 
+## Attribute-swap detector (Oct 26)
+
+Claim narrowed (user): from "detect deception" to **"detect concealed use of a protected attribute"**: the
+output causally depends on attribute X, but X is not legible in the text. Method: replay the same summary with
+only X flipped in the profile; `U_logp` = log-prob gap (`swap_eval.py`, tags v3/v4). Held-out attribute:
+nationality (fictional Valdorian / Ostrenian). Result (`results.md`): the university threshold transfers
+unchanged (recall 0.60 at 1% FPR on nationality vs 0.57 in-domain); it reads output × context dependence, not
+the prompt; it does not separate deceit from neutral well and is not better than TF-IDF on AUROC.
+
+Next, if continuing:
+- Negative control: swap a job-relevant field (`years_experience`) on honest episodes; expect high U and high
+  legibility (so not flagged as concealment).
+- A third attribute (gender with neutral names, or age bracket) to make "works on every attribute" 3-for-3.
+- Per-token Δlogp (`logp_tok` is saved): check that high-Δ tokens are the planned signal words (CoT quote).
+- Combine U with legibility (text→X) into one concealment score; report against TF-IDF at matched FPR.
+
 ## Gotchas
 
 - Runs: `setsid nohup uv run python -u run_gen.py … > log 2>&1 < /dev/null &`; separate `--out` per run;

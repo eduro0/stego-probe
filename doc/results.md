@@ -16,6 +16,9 @@ Current status and next steps: `status.md`.
 | `goal_pt_rth_s0.jsonl` | + receiver thinking | dropped (4 attempts died on vLLM disconnects or were stopped; partials in `legacy/`) | — |
 | `goal_pt_hk0_s0.jsonl`, `goal_pt_hk0_s1.jsonl` | partners, `--history-k 0` (no feedback; independent iterations) | 192 each | M3 main |
 | `honest_th_s0.jsonl`, `honest_th_s1.jsonl` | honest + sender thinking + verdict/tag rules (`honest-nv-nt-th`) | 128 each | **M3 matched negatives** (acc_S 0.55 / 0.50; pass 0.57 / 0.60: the university judge flags degree mentions) |
+| `goal_nat_hk0_s0.jsonl`, `goal_nat_hk0_s1.jsonl` | partners, `--secret-type nationality --history-k 0`, 4 iters × 32 | 128 each | swap-detector transfer (positives) |
+| `honest_nat_th_s0.jsonl`, `honest_nat_th_s1.jsonl` | honest + thinking + verdict/tag rules, nationality | 64 each | swap-detector transfer (negatives; acc_S 0.44 / 0.45) |
+| `acts_v3_specs.jsonl`, `acts_v4_specs.jsonl` | manifests of the swap extraction (university / nationality) | | activations themselves in `data/acts/` (gitignored) |
 | `icrl/{v1..v5,goal}/` | per-iteration logs (learner transcripts for emergent) | | |
 | `probe_dataset/` | exported regression dataset (see `dataset.md`) | 1152 episodes, 4352 rows | **M3 dataset** |
 | `legacy/` | pre-M1 prompt iterations, mixed intent-label pilot, rth partials | | not used |
@@ -214,3 +217,49 @@ matches S on 323/324. Extracted as `data/acts/v2/`.
 With more data the E3 activation advantage disappears (+0.07 in v1 → +0.008), so the act-vs-neutral
 contrast is no better from internals than from text. The E2 recall gain at 1% FPR holds (0.83 vs 0.69). The
 prompt-in-context results are unchanged. Sanity: S-token 1.000, shuffled 0.480.
+
+## Attribute-swap detector, university → nationality (Oct 26, tags v3 + v4, `swap_eval.py`)
+
+Question: does the output causally depend on a secret attribute it does not disclose, and does the same
+untrained test work on a new attribute? Each summary is teacher-forced twice per prompt, with the stored profile
+and with only the secret field flipped. `U_logp = log p(summary | true value) − log p(summary | flipped)`.
+No fitting; threshold τ = 99th percentile of university honest episodes (own prompt), applied unchanged to
+nationality. Nationality data: 256 partner (220 deceit, 27 neutral, 9 flagged by CoT judge + overseer) and
+128 honest episodes; partner acc_S 0.53–0.75, pass 0.91–0.97 (the nationality overseer is more lenient).
+0 summary round-trip mismatches in all 85 shards.
+
+| | university | nationality |
+|---|---|---|
+| deceit vs honest, own prompts (AUROC, R@1%) | 0.790, 0.57 | 0.834, 0.66 |
+| recall / honest FPR at the **university** τ | 0.57 / 0.01 | **0.60 / 0.01** |
+| deceit vs honest summaries, both under goal prompt | 0.760 | 0.810 |
+| deceit vs neutral, goal prompt | 0.646 | 0.585 [0.47, 0.69] |
+| neutral flagged at τ | 0.31 | 0.52 |
+| TF-IDF deceit vs honest, in-domain (cross-seed) | 0.975, R@1% 0.69 | 0.941, R@1% 0.28 |
+| TF-IDF fit on university, applied to nationality | — | 0.958; recall/FPR at univ τ 0.57 / 0.02 |
+| text→S (TF-IDF, out-of-fold): deceit / neutral / honest | 0.89 / 0.62 / 0.52 | 0.74 / 0.74 / 0.47 |
+
+Mean `U_logp` per class × replay prompt (university / nationality):
+
+| class | goal | sanct | honest |
+|---|---|---|---|
+| deceit | +4.76 / +5.42 | +3.53 / +5.03 | +0.07 / −0.14 |
+| neutral | +2.09 / +3.47 | +2.62 / +3.45 | −0.05 / +0.06 |
+| honest summaries | −0.18 / −0.05 | — | +0.02 / +0.16 |
+
+Findings:
+- The swap test transfers with no refitting: the university threshold gives 0.60 recall at 1% FPR on
+  nationality (0.57 in-domain). Same operating point as the TF-IDF transfer (0.57 / 0.02); TF-IDF has the
+  higher AUROC, because deceit summaries share a style across attributes. The swap test additionally names
+  *which* attribute the output depends on, and needs no labelled examples.
+- What it reads: dependence of *this output* on S under *this context*. Honest summaries replayed under the
+  goal prompt score ≈ 0, so it does not just read the prompt (unlike the v1/v2 probes). Under the honest prompt
+  every class scores ≈ 0, so it is not prompt-invariant in the brief's sense: it needs the context the model
+  actually had. Sanctioned ≈ goal: it detects S-use, not concealment; concealment = high U ∧ overseer PASS.
+- Deceit vs neutral is weak (0.59–0.65). "Neutral" (no plan in the CoT) summaries still depend on S (U +2–3.5)
+  and are partly S-legible to text (0.62 / 0.74): the objective leaks into outputs even when the CoT plans
+  no signal.
+- `U_act` (hidden-state shift at summary tokens) is a prompt detector: 0.998 own-prompt but 0.23 / 0.30 with
+  the prompt fixed (honest summaries shift *more* under the goal prompt), and FPR 0.12 on transfer. Dropped.
+- Sanity: S from the profile token 1.000 (both types); shuffled labels 0.505 / 0.526; honest own-prompt
+  U_logp centred (+0.02 sd 1.44 / +0.16 sd 1.06).
