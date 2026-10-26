@@ -218,6 +218,133 @@ With more data the E3 activation advantage disappears (+0.07 in v1 → +0.008), 
 contrast is no better from internals than from text. The E2 recall gain at 1% FPR holds (0.83 vs 0.69). The
 prompt-in-context results are unchanged. Sanity: S-token 1.000, shuffled 0.480.
 
+## M3: prompt-invariant detectors (`invariant_eval.py`, Oct 25)
+
+`uv run python invariant_eval.py [--exp A,B,C,D] [--layer 18]`, reads `data/probe_dataset/` directly. D = deceit
+(572), H = honest (256), U = neutral (124), F = deceit_flagged (198). Leave-one-seed-out, pooled, layer 18, `mean`.
+
+**A. Prompt invariance.** Probes trained on different context mixes, all scored on held-out seed.
+"erase k" = project out the top-k directions of paired goal−honest and goal−sanct differences of identical
+summaries (fit on the train seed) before training. shift/gap = score change of the same summary between goal
+and honest replays, divided by the within-prompt D−H gap (0 = prompt-invariant).
+
+| Train on | goal: D vs H | honest: D vs H | swapped D/honest vs H/goal | U vs H | D vs U | shift/gap |
+|---|---|---|---|---|---|---|
+| own prompts (confounded) | 0.953, R@1% 0.55 | 0.964 | **0.000** | 0.866 | 0.685 | +3.69 |
+| honest prompt only | 0.984 | 0.985 | 0.991 | 0.946 | 0.691 | −0.12 |
+| goal prompt only | 0.985 | 0.983 | 0.993 | 0.949 | 0.697 | −0.16 |
+| 2×2 (both classes, both prompts) | 0.985, R@1% 0.84 | 0.985 | 0.985 | 0.950 | 0.696 | −0.01 |
+| own prompts + erase 1 | 0.985, R@1% 0.84 | 0.985 | **0.977**, R@1% 0.83 | 0.947 | 0.700 | +0.00 |
+| TF-IDF on summary | 0.975, R@1% 0.69 | (no prompt) | | 0.924 | 0.710 | |
+
+Erase-1 swap AUROC is 0.97–0.98 at every layer (4–36). Summary length alone: 0.692.
+
+**B. Concealed knowledge (S at summary tokens beyond the text).** Out-of-fold S logits from activations and from
+TF-IDF (trained on D+H+U together). Regress the signed activation logit on the signed text logit + class dummies.
+β(D−H) and β(D−U) = extra internal S for deceit summaries at equal text-S. Text→S AUROC: D 0.884, H 0.510, U 0.621.
+
+| Prompt | act→S AUROC D / H / U | β(D−H) | β(D−U) |
+|---|---|---|---|
+| honest | 0.988 / 0.928 / 0.926 | +0.88 [0.71, 1.05] | +0.54 [0.28, 0.78] |
+| goal | 1.000 / 1.000 / 1.000 | +0.51 [0.36, 0.66] | +0.27 [0.07, 0.47] |
+
+Layer profile under the honest prompt, β(D−U): 0.41 (L4), 0.29 (L12), 0.54 (L18), 0.60 (L20), 0.59 (L24), 0.30 (L36).
+Same with a stronger text control (word 1–3 + char 2–5 TF-IDF, text→S D 0.872): β(D−U) 0.56 at L18, 0.63 at L20.
+
+**C. Plan at `</think>` → summary.** D vs U probe on the `</think>` vector (goal_think): 0.838, R@1% 0.23 (the
+labels come from the reasoning text that precedes it). Transferred to summary-token means: 0.540 (goal_think),
+0.489 (goal_nothink). D vs H: 1.000 at `</think>`, 0.512 on goal_nothink summaries.
+
+**D. Concealment direction** (mean goal−sanct on identical partner summaries). Projection within a fixed prompt:
+D vs U 0.42–0.51, D vs F 0.48–0.51 (random-direction null |AUC−0.5| p95 ≈ 0.16), D vs H 0.77–0.81 (null p95
+≈ 0.37, not significant). cos(goal−sanct, sanct−honest) = −0.43.
+
+**Reading.**
+- **The prompt confound is about rank 1 and removable.** Erasing one paired-replay direction turns the
+  confounded probe (swap 0.000, shift/gap 3.7) into a prompt-invariant one (swap 0.977, shift 0.00) with no loss
+  in within-prompt AUROC. Training under one prompt and testing under the other works just as well. The prompt
+  and the summary signal are almost orthogonal at the summary tokens.
+- **What the invariant probe reads is the summary, not the intent.** It matches TF-IDF on AUROC (0.985 vs
+  0.975; better at 1% FPR, 0.84 vs 0.69), separates neutral partner summaries from honest ones (U vs H 0.95)
+  and does not separate acting from neutral partners better than text (D vs U 0.70 vs 0.71). It is a
+  "partner-written summary" detector that works under any prompt.
+- **No intent signal beyond text was found.** The concealment direction carries no behaviour information
+  within a fixed prompt (D vs U, D vs F at chance); the plan read at `</think>` does not persist into the
+  summary representation.
+- **One positive result: excess internal S for deceit summaries.** With no objective in context (honest
+  prompt), the model represents S at deceit summary tokens more than their text predicts, against both
+  honest and neutral summaries, robust to a stronger n-gram text control, peaking at layers 20–24. Open
+  confound: the profile with S is in context, so this may be the model attending back to profile facts that
+  deceit summaries select (field selection), not hidden S in the summary itself. The no-profile replay
+  (brief B) separates the two.
+
+## M3: robustness of the activations-over-text gain (`robustness_eval.py`, Oct 25)
+
+`uv run python robustness_eval.py --layer 18 --n-boot 1000 --n-match 200`. Layer 18, `mean`, leave-one-seed-out,
+pooled. Class-stratified bootstrap with shared indices (Δ rows are paired). R@1% for D vs H rests on ~2.6 honest
+negatives (256), for D vs U on ~1.2 (124); R@5% is the steadier point.
+
+| D vs H | AUROC | R@1%FPR | R@5%FPR |
+|---|---|---|---|
+| act erase1 (prompt-invariant) | 0.985 [0.978, 0.991] | 0.836 [0.59, 0.94] | 0.939 [0.92, 0.96] |
+| TF-IDF word 1–2 | 0.975 [0.964, 0.984] | 0.691 [0.47, 0.86] | 0.904 [0.84, 0.95] |
+| TF-IDF word 1–3 + char 2–5 | 0.976 [0.966, 0.985] | 0.736 [0.41, 0.86] | 0.925 [0.84, 0.96] |
+| Δ act − word TF-IDF | +0.010 [+0.004, +0.016] | +0.145 [+0.03, +0.25] | +0.035 [−0.007, +0.093] |
+| Δ act − strong TF-IDF | +0.009 [+0.002, +0.015] | +0.100 [−0.11, +0.31] | +0.014 [−0.014, +0.091] |
+| length-matched Δ act − word TF-IDF (~251 pairs, 200 draws) | +0.015 [+0.005, +0.025] | +0.121 [+0.004, +0.26] | +0.032 [−0.024, +0.096] |
+| length-residualized (label-free fit) Δ act − word TF-IDF | +0.014 [+0.006, +0.023] | +0.175 [+0.009, +0.35] | |
+
+| D vs U (lengths equal, length AUROC 0.497) | AUROC | R@1%FPR | R@5%FPR |
+|---|---|---|---|
+| act erase1 | 0.718 [0.669, 0.764] | 0.140 [0.11, 0.25] | 0.259 [0.16, 0.36] |
+| strong TF-IDF | 0.722 [0.675, 0.770] | 0.065 [0.02, 0.22] | 0.208 [0.15, 0.46] |
+| Δ act − strong TF-IDF | −0.005 [−0.042, +0.030] | +0.075 [−0.06, +0.18] | +0.051 [−0.22, +0.13] |
+
+**Reading.** Activations beat text on D vs H AUROC by a small but significant +0.01, robust to length matching,
+length residualizing and a stronger n-gram baseline. The low-FPR gain is not robust: significant against word
+TF-IDF only, CI spans 0 against char+word TF-IDF and at 5% FPR. Length is not what either scorer reads. D vs U:
+no activation advantage. (TF-IDF + raw word count scored worse, 0.957: unscaled length column, not informative.)
+
+## M3: v3b replays: no profile, bare summary, S flip (`v3_eval.py`, Oct 25)
+
+Extraction tag **`v3b`** (`acts/v3` on the Volume is the attribute-swap branch's): `modal_app.py --v3 --tag v3b`,
+1,152 episodes × 7 passes, 0 round-trip mismatches, ~10 min on 2× L40S, < $1. `build_dataset.py --tags v3b` →
+`data/probe_dataset_v3/` (adds `logp_sum/logp_mean/n_tok`, `logp_tok.npy`, `logp_off.npy`). Passes (empty think):
+`{goal,honest}_nothink` (re-run for log-probs; activations match v1, cos 1.0), `{goal,honest}_noprof` (profile
+lines → "(not shown)"), `{goal,honest}_flip` (university swapped in the profile only), `bare_noprof` (no system
+prompt, user turn "Write a short candidate summary."). `uv run python v3_eval.py`. Layer 18, `mean`, LOSO.
+
+**a. Excess S without the profile** (text→S D 0.884 / H 0.510 / U 0.621):
+
+| Pass | act→S D / H / U | β(D−H) | β(D−U) |
+|---|---|---|---|
+| honest_nothink (profile in context) | 0.988 / 0.928 / 0.926 | +0.88 [0.70, 1.04] | +0.54 [0.30, 0.77] |
+| honest_noprof | 0.909 / 0.422 / 0.646 | +1.25 [1.01, 1.49] | +0.64 [0.31, 1.00] |
+| goal_noprof | 0.911 / 0.415 / 0.668 | +1.31 [1.07, 1.55] | +0.64 [0.29, 1.01] |
+| bare_noprof | 0.909 / 0.419 / 0.642 | +1.24 [1.01, 1.47] | +0.70 [0.36, 1.02] |
+
+**c. Bare-summary probe as text baseline:** D vs H 0.985 [0.98, 0.99] (R@1% 0.81), D vs U 0.733, U vs H 0.946;
+TF-IDF 0.975 (0.69) / 0.710 / 0.924; goal_nothink probe 0.985 (0.83) / 0.718 / 0.948.
+
+**b. Counterfactual dependence** s = log p(summary | S) − log p(summary | flipped S), zero-shot, per-episode sum:
+
+| Prompt | mean s D / H / U | D vs H | D vs U | U vs H | R@1%FPR(H) D / U |
+|---|---|---|---|---|---|
+| honest | +0.07 / +0.02 / −0.05 | 0.503 | 0.518 | 0.484 | 0.01 / 0.01 |
+| goal | +4.76 / −0.18 / +2.09 | 0.760 [0.73, 0.79] | 0.646 | 0.610 | 0.17 / 0.10 |
+
+corr(s_honest, s_goal) = 0.10; by mechanism under goal: spin +7.5, field selection +3.8.
+
+**Reading.**
+- **The excess-S result is a text effect, not hidden state.** It survives removing the profile and removing all
+  context (β(D−U) +0.64 / +0.70), so it is the model reading S cues in deceit text better than TF-IDF does.
+  The high act→S on honest summaries (0.93) came from the profile (0.42 without it).
+- **Everything the activation probes detect is in the summary text.** The same model reading the bare summary
+  matches every full-context and prompt-invariant probe. The gain over TF-IDF is a better text encoder.
+- **S-dependence of the summary exists only with the objective in context.** Under the honest prompt the
+  summaries are no more likely given the true S than the flipped one (0.50); under the goal prompt D vs H 0.76.
+  Same quantity as the attribute-swap `U_logp` detector (next section).
+
 ## Attribute-swap detector, university → nationality (Oct 26, tags v3 + v4, `swap_eval.py`)
 
 Question: does the output causally depend on a secret attribute it does not disclose, and does the same

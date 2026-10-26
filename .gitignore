@@ -6,3 +6,4 @@ __pycache__/
 # activations: GBs of .npy/.npz, regenerate with modal_app.py / build_dataset.py (see doc/dataset.md)
 data/acts/
 data/probe_dataset/
+data/probe_dataset_v3/

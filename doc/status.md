@@ -1,6 +1,6 @@
 # Status and next steps
 
-Read this first. **Probe dataset: `dataset.md`** (`data/probe_dataset/`). Code reference: `environment.md`. Results + data inventory: `results.md`. Original design:
+Read this first. **Sprint write-up draft: `writeup.md`.** **Probe dataset: `dataset.md`** (`data/probe_dataset/`). Code reference: `environment.md`. Results + data inventory: `results.md`. Original design:
 `env-plan.md`. Literature: `probing-lit-review.md`. Deadline: Sun Oct 25 11:59pm AoE.
 
 ## Research goal (from the user)
@@ -82,6 +82,27 @@ The dataset for the regression is built and documented: `doc/dataset.md`, `data/
 256 honest episodes, 5 replay contexts, 18 layers). The receiver-thinking run (`goal_pt_rth_s0`) was dropped
 (not needed; 4 attempts, partials in `data/legacy/`). Next session (user): find a technique that isolates
 deceitfulness from prompt variance, using the controls listed in `dataset.md`.
+
+## Prompt-invariance results and next step (Oct 25, `invariant_eval.py`)
+
+Results in `results.md`, "M3: prompt-invariant detectors". The prompt confound is rank ~1: erasing one paired
+goal−honest replay direction makes the deceit probe prompt-invariant (swapped AUROC 0.000 → 0.977). The
+invariant probe reads the summary text (≈ TF-IDF; neutral vs honest 0.95; acting vs neutral 0.70 ≈ text).
+Concealment direction and `</think>` plan transfer are null within a fixed prompt. One positive result:
+excess internal S for deceit summaries beyond text, under the honest prompt (β(D−U) +0.54 [0.28, 0.78]).
+Next step (needs a Modal extraction, tag v3; confirm with the user): replay summaries **without the profile**
+to test whether that excess S is hidden in the summary or read back from the profile.
+
+## v3b outcome (Oct 25, late)
+
+Robustness (`robustness_eval.py`): activations beat TF-IDF on D vs H by +0.01 AUROC (significant, survives
+length control); the low-FPR gain does not survive a char+word TF-IDF. v3b (`v3_eval.py`): the excess-S result
+survives removing the profile and all context, and a probe on the bare summary matches every activation probe,
+so every activation signal found so far is readable from the summary text. The summary's S-dependence shows up
+only with the objective in context (flip log-prob, goal 0.76 vs honest 0.50). **No evidence of sender-internal
+concealment signal beyond the output text in these data.**
+The attribute-swap detector (next section) is the positive, attribute-general result: dependence on X through
+the model's log-probs, not hidden state.
 
 ## Attribute-swap detector (Oct 26)
 
