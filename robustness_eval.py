@@ -1,4 +1,4 @@
-"""Robustness of the M3 activations-over-text gain: paired bootstrap CIs and the summary-length confound.
+"""Robustness of the activations-over-text gain: paired bootstrap CIs and the summary-length confound.
 
     uv run python robustness_eval.py [--layer 18] [--feat mean] [--n-boot 1000] [--n-match 200]
 

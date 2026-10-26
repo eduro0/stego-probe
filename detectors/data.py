@@ -1,4 +1,4 @@
-"""Load M3 activations (data/acts/{tag}/shard_*.npz) joined with episode metadata and CoT intent labels."""
+"""Load activations (data/acts/{tag}/shard_*.npz) joined with episode metadata and CoT intent labels."""
 from __future__ import annotations
 
 import json

@@ -1,10 +1,10 @@
 [project]
 name = "stego-probe"
 version = "0.1.0"
-description = "Emergent steganography environment (hiring, misspecified reward) + activation capture for collusion detectors."
+description = "Steganographic collusion environment (hiring, misspecified reward) + activation replay for collusion detectors."
 requires-python = ">=3.11"
 # Local side is CPU only: generation goes to a Qwen3-8B vLLM server on Modal (serve_vllm.py),
-# paraphrases / ICRL learner go to OpenRouter. torch/transformers live only in the Modal images.
+# the CoT intent judge goes to OpenRouter. torch/transformers live only in the Modal images.
 dependencies = [
     "openai>=1.86.0",
     "modal>=1.2",

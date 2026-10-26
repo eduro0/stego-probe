@@ -1,4 +1,4 @@
-"""Export the M3 probe dataset (honest vs steganographic sender activations) -> data/probe_dataset/.
+"""Export the probe dataset (honest vs steganographic sender activations) -> data/probe_dataset/.
 
     uv run python build_dataset.py [--tags v1,v2] [--out data/probe_dataset]
     uv run python build_dataset.py --tags v3b         # -> data/probe_dataset_v3 (default out when v3b is in tags)

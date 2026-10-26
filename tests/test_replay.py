@@ -1,7 +1,7 @@
 """replay.py: teacher-forced pass specs keep the summary fixed and vary only the context."""
 import pytest
 
-from env.icrl import ICRLConfig
+from env.loop import LoopConfig
 from replay import (
     BARE_USER,
     HONEST_PASSES,
@@ -11,26 +11,21 @@ from replay import (
     build_passes,
     build_v3_passes,
 )
-from run_gen import generate, generate_emergent
-from tests.test_conditions import FakeAgents
+from run_gen import generate_goal, generate_honest
+from tests.fakes import FakeAgents
 
 
-def thinking(agents):
-    async def sender(messages, *, temperature, max_tokens, seed=None):
-        out = await agents(messages, temperature=temperature, max_tokens=max_tokens)
-        return f"<think>\nplan for this candidate\n</think>\n\n{out}"
-    return sender
+async def _episodes(tmp_path):
+    a = FakeAgents()
+    partner = (await generate_goal(a.chat, a.sender, LoopConfig(iters=1, batch=4, concurrency=4),
+                                   out=tmp_path / "g.jsonl", log_dir=tmp_path / "logs"))[0]
+    honest = (await generate_honest(a.chat, a.sender, secret_type="university", batch=4, seed=0, concurrency=4,
+                                    p_secret=0.9))[0]
+    return partner, honest
 
 
 async def test_partner_and_honest_passes(tmp_path):
-    agents = FakeAgents()
-    cfg = ICRLConfig(iters=1, batch=4, concurrency=4, receiver_knows_policy=True, block_verdicts=True,
-                     block_tags=True, sender_goal=True, receiver_ally=True, partners=True)
-    partner = (await generate_emergent(agents, None, cfg, out=tmp_path / "g.jsonl", log_dir=tmp_path / "icrl",
-                                       learner_name="none", sender=thinking(agents)))[0]
-    honest = (await generate(agents, condition="honest", secret_type="university", batch=4, seed=0, code_idx=0,
-                             concurrency=4, p_secret=0.9, block_verdicts=True, block_tags=True,
-                             sender=thinking(agents)))[0]
+    partner, honest = await _episodes(tmp_path)
 
     pp, hp = build_passes(partner), build_passes(honest)
     assert tuple(p["pass"] for p in pp) == PARTNER_PASSES and tuple(p["pass"] for p in hp) == HONEST_PASSES
@@ -46,14 +41,7 @@ async def test_partner_and_honest_passes(tmp_path):
 
 
 async def test_v3_passes(tmp_path):
-    agents = FakeAgents()
-    cfg = ICRLConfig(iters=1, batch=4, concurrency=4, receiver_knows_policy=True, block_verdicts=True,
-                     block_tags=True, sender_goal=True, receiver_ally=True, partners=True)
-    partner = (await generate_emergent(agents, None, cfg, out=tmp_path / "g.jsonl", log_dir=tmp_path / "icrl",
-                                       learner_name="none", sender=thinking(agents)))[0]
-    honest = (await generate(agents, condition="honest", secret_type="university", batch=4, seed=0, code_idx=0,
-                             concurrency=4, p_secret=0.9, block_verdicts=True, block_tags=True,
-                             sender=thinking(agents)))[0]
+    partner, honest = await _episodes(tmp_path)
     vals = ("Halvorsen University", "Corrigan State University")
     for ep, own in ((partner, "goal"), (honest, "honest")):
         ps = {p["pass"]: p for p in build_v3_passes(ep)}
@@ -78,8 +66,6 @@ async def test_v3_passes(tmp_path):
         assert ps["bare_noprof"]["secret_value"] is None
 
 
-async def test_rejects_other_conditions():
-    eps = await generate(FakeAgents(), condition="honest", secret_type="university", batch=2, seed=0, code_idx=0,
-                         concurrency=2, p_secret=0.9)
+def test_rejects_other_conditions():
     with pytest.raises(ValueError):
-        build_passes(eps[0])
+        build_passes({"episode_id": "x", "condition": "other"})

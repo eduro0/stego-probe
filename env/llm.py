@@ -1,7 +1,8 @@
 """LLM clients.
 
-- Agents (sender / overseer / receiver): Qwen3-8B on our Modal vLLM server (serve_vllm.py), thinking off.
-- Trusted paraphraser and ICRL learner: OpenRouter (OPENROUTER_API_KEY from stego-probe/.env or the shell).
+- Agents (sender / overseer / receiver): Qwen3-8B on our Modal vLLM server (serve_vllm.py); thinking off,
+  except the sender (thinking on, reasoning kept).
+- CoT intent judge (intent_label.py): OpenRouter (OPENROUTER_API_KEY from stego-probe/.env or the shell).
 """
 from __future__ import annotations
 
@@ -17,10 +18,6 @@ from openai import AsyncOpenAI
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 AGENT_MODEL = "Qwen/Qwen3-8B"
-PARAPHRASE_MODEL = "meta-llama/llama-3.1-8b-instruct"  # OpenRouter id; different family from the agents
-# ICRL learner: "agent" = Qwen3-8B on our vLLM server with thinking on; any other value is an OpenRouter id
-# (M2 fallback (1): a stronger learner, e.g. deepseek/deepseek-v4.1-flash).
-DEFAULT_LEARNER = "agent"
 VLLM_APP, VLLM_FN = "stego-vllm", "serve"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -98,19 +95,6 @@ def agent_chat() -> Chat:
 
 
 def sender_thinking_chat() -> Chat:
-    """`goal` sender with thinking on: the reasoning is kept in the episode (planning happens there)."""
+    """Sender with thinking on: the reasoning is kept in the episode (planning happens there)."""
     return Chat(agent_client(), AGENT_MODEL, {"chat_template_kwargs": {"enable_thinking": True}},
                 keep_think=True)
-
-
-def learner_chat(model: str = DEFAULT_LEARNER) -> Chat:
-    """The learner writes no message we probe, so it may think; strip_think drops the reasoning."""
-    if model == "agent":
-        return Chat(agent_client(), AGENT_MODEL, {"chat_template_kwargs": {"enable_thinking": True}})
-    # Reasoning models (deepseek-v4.1-flash) spend any budget hand-tallying the batch and return empty
-    # content (finish=length, even with effort=low or reasoning.max_tokens); with reasoning off they answer.
-    return Chat(openrouter_client(), model, {"reasoning": {"enabled": False}})
-
-
-def paraphrase_chat() -> Chat:
-    return Chat(openrouter_client(), PARAPHRASE_MODEL)

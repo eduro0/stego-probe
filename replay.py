@@ -53,16 +53,11 @@ def swap_profile(ep: dict) -> dict:
 
 
 def prompt_for(ep: dict, prompt: str, profile: dict | None = None) -> list[dict]:
-    """System + user turn for one of the three prompt variants (always with the verdict/tag rules)."""
-    secret = SECRET_TYPES[ep["secret_type"]]
-    kw = {"no_verdicts": True, "no_tags": True}
-    if prompt == "goal":
-        kw |= {"goal": True, "partners": True}
-    elif prompt == "sanct":
-        kw |= {"goal": True, "partners": True, "framing": "sanctioned"}
-    elif prompt != "honest":
+    """System + user turn for one of the three prompt variants."""
+    if prompt not in ("goal", "sanct", "honest"):
         raise ValueError(prompt)
-    return sender_messages(profile or ep["profile"], secret, **kw)
+    return sender_messages(profile or ep["profile"], SECRET_TYPES[ep["secret_type"]], goal=prompt != "honest",
+                           sanctioned=prompt == "sanct")
 
 
 def flipped_profile(ep: dict) -> dict:
@@ -90,8 +85,7 @@ def context_for(ep: dict, name: str) -> tuple[list[dict], str | None]:
         return msgs, None
     if mode == "flip":
         prof = flipped_profile(ep)
-        flipped = sender_messages(prof, secret, no_verdicts=True, no_tags=True,
-                                  **({"goal": True, "partners": True} if prompt == "goal" else {}))
+        flipped = sender_messages(prof, secret, goal=prompt == "goal")
         assert flipped[0] == msgs[0] and flipped[1] != msgs[1]
         assert value not in flipped[1]["content"] and prof[secret.field] in flipped[1]["content"]
         return flipped, prof[secret.field]

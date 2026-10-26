@@ -1,4 +1,4 @@
-"""M3/M4 probe evaluation on teacher-forced sender activations.
+"""Probe evaluation on teacher-forced sender activations.
 
     uv run python probe_eval.py [--tags v1,v2] [--layers 18] [--feat mean]
 

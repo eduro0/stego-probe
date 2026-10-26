@@ -8,8 +8,7 @@ from replay import build_swap_passes, swap_profile
 
 def _episode(secret_type: str, kind: str) -> dict:
     c = sample_candidates(2, "goal", secret_type, seed=0)[0]
-    kw = {"no_verdicts": True, "no_tags": True} | ({"goal": True, "partners": True} if kind == "partner" else {})
-    msgs = sender_messages(c.profile, SECRET_TYPES[secret_type], **kw)
+    msgs = sender_messages(c.profile, SECRET_TYPES[secret_type], goal=kind == "partner")
     return {"episode_id": f"{secret_type}-{kind}", "secret_type": secret_type, "S": c.S, "profile": c.profile,
             "condition": "goal" if kind == "partner" else "honest", "partners": kind == "partner",
             "sender_thinking": True, "overseer_blocks_tags": True, "message": "A solid analyst.",

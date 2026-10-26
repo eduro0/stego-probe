@@ -3,11 +3,9 @@
     uv run python intent_label.py data/goal_pt_*.jsonl data/honest_th_*.jsonl [--limit 64] [--judge <id>]
 
 An OpenRouter judge (not Qwen) reads the profile, the sender's <think> block and the final summary, and
-returns {intent, direction, mechanism, strength, executed, quote}. These are the probe targets for M3: positives
-and negatives share the goal prompt, so a probe cannot just read which system prompt the sender got.
-Only partner runs (goal + --partners) and honest-thinking runs (the matched negative control: CoT labels
-check it never plans to signal) are labeled unless --all. Appends; episodes already in the output are
-skipped, so the script is restartable.
+returns {intent, direction, mechanism, strength, executed, quote}. Within the partner runs this splits
+covert (a concrete S-dependent plan) from neutral partner episodes; on honest runs it measures the judge's
+false-positive rate. Appends; episodes already in the output are skipped, so the script is restartable.
 """
 from __future__ import annotations
 
@@ -106,15 +104,13 @@ async def main() -> None:
     ap.add_argument("--limit", type=int, help="random sample of this many unlabeled episodes (pilot)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--concurrency", type=int, default=16)
-    ap.add_argument("--all", action="store_true", help="also label non-partner goal runs (e.g. goal_th_v1)")
     args = ap.parse_args()
 
     done = set()
     if args.out.exists():
         done = {json.loads(line)["episode_id"] for line in args.out.open()}
     eps = [e for f in args.files for e in map(json.loads, f.open())
-           if e["episode_id"] not in done and think_text(e)
-           and (args.all or e.get("partners") or e["condition"] == "honest")]
+           if e["episode_id"] not in done and think_text(e)]
     if args.limit:
         eps = random.Random(args.seed).sample(eps, min(args.limit, len(eps)))
     print(f"labeling {len(eps)} episodes with {args.judge} (skipped {len(done)} already labeled)")

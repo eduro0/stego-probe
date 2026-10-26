@@ -7,3 +7,4 @@ __pycache__/
 data/acts/
 data/probe_dataset/
 data/probe_dataset_v3/
+.claude/worktrees/

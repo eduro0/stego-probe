@@ -1,4 +1,4 @@
-"""M3 activation capture: teacher-forced replay of sender summaries on bf16 Qwen3-8B (Modal, L40S).
+"""Activation capture: teacher-forced replay of sender summaries on bf16 Qwen3-8B (Modal, L40S).
 
     modal run modal_app.py --files data/goal_pt_s0.jsonl,data/honest_th_s0.jsonl --limit 5 --tag smoke
     modal run modal_app.py --files data/goal_pt_s0.jsonl,...,data/honest_th_s1.jsonl --tag v1

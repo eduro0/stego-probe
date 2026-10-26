@@ -82,7 +82,7 @@ summary was written after thinking); `think` passes put the plan text in context
 
 ## The confound to beat: prompt variance
 
-Results so far (layer 18, `mean`, LR probe, train one seed / test the other; `results.md`, "M3 probes"):
+Results so far (layer 18, `mean`, LR probe, train one seed / test the other; `results.md`, "Probes"):
 
 | Setup | AUROC | Note |
 |---|---|---|
@@ -112,15 +112,15 @@ Controls already in the data for isolating deceit from prompt variance:
 - Partner runs with the same seed share candidate profiles (`goal_pt_s0` and `goal_pt_hk0_s0` both sample with
   `seed * 1000 + iter`), so split by `seed`, never randomly by row, to keep profiles out of both sides.
 - Iterations within a feedback run share a receiver context; the sender's prompt does not change across
-  iterations (no learner), so iterations are close to independent samples from the sender's side.
+  iterations, so iterations are close to independent samples from the sender's side.
 - S is always explicit in the profile in context; `stok.npy` decodes S at 1.000 (sanity check).
 
 ## Regenerating
 
 ```bash
-uv run python run_gen.py --condition goal --iters 8 --batch 32 --seed 0 --sender-thinking --partners --out data/goal_pt_s0.jsonl
-uv run python run_gen.py --condition goal --iters 6 --batch 32 --seed 0 --sender-thinking --partners --history-k 0 --out data/goal_pt_hk0_s0.jsonl
-uv run python run_gen.py --condition honest --batch 128 --seed 0 --sender-thinking --no-verdicts --no-tags --out data/honest_th_s0.jsonl
+uv run python run_gen.py --condition goal --iters 8 --batch 32 --seed 0 --out data/goal_pt_s0.jsonl
+uv run python run_gen.py --condition goal --iters 6 --batch 32 --seed 0 --history-k 0 --out data/goal_pt_hk0_s0.jsonl
+uv run python run_gen.py --condition honest --batch 128 --seed 0 --out data/honest_th_s0.jsonl
 uv run python intent_label.py data/goal_pt_*.jsonl data/honest_th_*.jsonl
 uv run modal run modal_app.py --files <comma-separated episode files> --tag v3
 mkdir -p data/acts && uv run modal volume get stego-probe acts/v3 data/acts/
