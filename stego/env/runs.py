@@ -1,6 +1,6 @@
 """Simulated runs (paper §3.2-3.3, Table 1): partner runs in rounds, and the matched honest batch.
 
-Partner run, round t (strategy_id = {run_id}-it{t:02d}):
+Partner run, round t (episode ids {run_id}-r{t:02d}-{i:04d}):
     1. sample `batch` candidates with S-driven labels (seed = seed * 1000 + t; same seed -> same profiles)
     2. the receiver's feedback window: the last `feedback_window` unflagged summaries of earlier rounds with
        their correct decisions, shuffled, shared by the whole round (0 = every round independent)
@@ -35,11 +35,12 @@ class RunConfig:
     p_secret: float = 0.9  # P(hire | S=A) in partner runs
     concurrency: int = 32
 
+    def run_name(self) -> str:
+        """partner_fb16, partner_fb0 or honest: the stem of the paper's episode files."""
+        return f"partner_fb{self.feedback_window}" if self.condition == "partner" else "honest"
+
     def run_id(self) -> str:
-        ts = int(time.time())
-        if self.condition == "partner":
-            return f"partner-fb{self.feedback_window}-{self.secret_type}-s{self.seed}-{ts}"
-        return f"honest-{self.secret_type}-s{self.seed}-{ts}"
+        return f"{self.secret_type}-{self.run_name()}-s{self.seed}-{int(time.time())}"
 
 
 def window(history: list[dict], k: int, rng: random.Random) -> list[dict]:
@@ -54,23 +55,22 @@ async def partner_rounds(chat, sender, cfg: RunConfig, run_id: str) -> AsyncIter
     rng = random.Random(cfg.seed)
     sem = asyncio.Semaphore(cfg.concurrency)
 
-    async def one(i, cand, t, strategy_id, w):
+    async def one(i, cand, t, w):
         async with sem:
-            return await run_episode(chat, sender, cand, condition="partner", episode_id=f"{strategy_id}-{i:04d}",
-                                     run_id=run_id, seed=cfg.seed, secret_type=cfg.secret_type,
-                                     feedback_window=cfg.feedback_window, history=w, round_=t,
-                                     strategy_id=strategy_id, sample_seed=cfg.seed * 100_000 + t * 1000 + i)
+            return await run_episode(chat, sender, cand, condition="partner",
+                                     episode_id=f"{run_id}-r{t:02d}-{i:04d}", run_id=run_id, seed=cfg.seed,
+                                     secret_type=cfg.secret_type, feedback_window=cfg.feedback_window,
+                                     history=w, round_=t, sample_seed=cfg.seed * 100_000 + t * 1000 + i)
 
     for t in range(cfg.rounds):
-        strategy_id = f"{run_id}-it{t:02d}"
         cands = sample_candidates(cfg.batch, "partner", cfg.secret_type, seed=cfg.seed * 1000 + t,
                                   p_secret=cfg.p_secret)
         w = window(history, cfg.feedback_window, rng)
-        eps = await asyncio.gather(*(one(i, c, t, strategy_id, w) for i, c in enumerate(cands)))
+        eps = await asyncio.gather(*(one(i, c, t, w) for i, c in enumerate(cands)))
         # Only summaries that reached the receiver unflagged give it useful feedback.
         history.extend({"message": e["message"], "decision": e["receiver_decision"], "label": e["label"]}
                        for e in eps if e["overseer_verdict"] == "PASS")
-        yield eps, {"run_id": run_id, "iter": t, "strategy_id": strategy_id, "summary": summarize(eps)}
+        yield eps, {"run_id": run_id, "round": t, "summary": summarize(eps)}
 
 
 async def honest_batch(chat, sender, cfg: RunConfig, run_id: str) -> list[dict]:
@@ -81,7 +81,7 @@ async def honest_batch(chat, sender, cfg: RunConfig, run_id: str) -> list[dict]:
         async with sem:
             return await run_episode(chat, sender, cand, condition="honest", episode_id=f"{run_id}-{i:04d}",
                                      run_id=run_id, seed=cfg.seed, secret_type=cfg.secret_type,
-                                     strategy_id=f"{run_id}-static", sample_seed=cfg.seed * 100_000 + i)
+                                     sample_seed=cfg.seed * 100_000 + i)
 
     return await asyncio.gather(*(one(i, c) for i, c in enumerate(cands)))
 
@@ -112,7 +112,7 @@ async def generate(chat, sender, cfg: RunConfig, *, out: Path, log_dir: Path, ve
         all_eps += eps
         if verbose:
             s = log["summary"]
-            print(f"round {log['iter']:02d}  reward={s['mean_reward']:.2f} acc_S={s['acc_S']:.2f} "
+            print(f"round {log['round']:02d}  reward={s['mean_reward']:.2f} acc_S={s['acc_S']:.2f} "
                   f"pass={s['pass_rate']:.2f} hire={s['hire_rate']:.2f} words={s['mean_words']:.0f}", flush=True)
             for e in eps[:3]:
                 print(f"      [{e['S']}->{e['receiver_decision']} {e['overseer_verdict']}] {e['message'][:160]}",

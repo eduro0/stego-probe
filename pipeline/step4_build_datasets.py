@@ -4,7 +4,7 @@
     uv run python pipeline/step4_build_datasets.py                 # all sets found under data/acts/
     uv run python pipeline/step4_build_datasets.py ladder          # one set
 
-Reads data/acts/<set>/**/shard_*.npz, writes data/replays/<set>/ (format: doc/replays.md,
+Reads data/acts/<set>/shard_*.npz, writes data/replays/<set>/ (format: README,
 stego.replay.dataset). Sets: prompt_swap (~2.5 GB), ladder (~3.4 GB), flip (~3.5 GB).
 """
 from __future__ import annotations

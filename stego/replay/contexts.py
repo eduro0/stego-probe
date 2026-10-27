@@ -29,7 +29,6 @@ from __future__ import annotations
 from stego.env.profiles import SECRET_TYPES
 from stego.env.prompts import sender_messages
 from stego.intent import think_text
-from stego.paths import kind
 
 PROFILE_PLACEHOLDER = "(not shown)"
 BARE_USER = "Write a short candidate summary."
@@ -43,28 +42,6 @@ REPLAY_SETS = {
                          "honest_flipped"),
              "honest": ("honest", "honest_flipped", "partner", "partner_flipped")},
 }
-
-# Context names in the shards of the extractions reported in the paper (tags v1, v2: prompt_swap; v3b:
-# ladder; v3, v4: flip), mapped when the datasets are built (stego.replay.dataset).
-LEGACY_CONTEXTS = {
-    "goal_nothink": "partner", "goal_think": "partner_cot", "sanct_nothink": "sanctioned",
-    "honest_nothink": "honest", "honest_think": "honest_cot",
-    "goal_noprof": "partner_noprofile", "honest_noprof": "honest_noprofile",
-    "goal_flip": "partner_flipped", "honest_flip": "honest_flipped", "bare_noprof": "bare",
-    "goal_nothink_orig": "partner", "goal_nothink_swap": "partner_flipped",
-    "sanct_nothink_orig": "sanctioned", "sanct_nothink_swap": "sanctioned_flipped",
-    "honest_nothink_orig": "honest", "honest_nothink_swap": "honest_flipped",
-}
-
-
-def own_prompt(ep: dict) -> str:
-    """The prompt the episode was generated under."""
-    return kind(ep)
-
-
-def other_prompt(ep: dict) -> str:
-    return "honest" if kind(ep) == "partner" else "partner"
-
 
 def flipped_profile(ep: dict) -> dict:
     """The stored profile with only the secret attribute flipped to the other value."""
@@ -86,7 +63,7 @@ def build_context(ep: dict, name: str) -> dict:
         raise ValueError(f"unknown context {name!r}")
     profile = flipped_profile(ep) if variant == "flipped" else ep["profile"]
     msgs = sender_messages(profile, secret, prompt)
-    if prompt == own_prompt(ep) and variant in ("", "cot"):
+    if prompt == ep["condition"] and variant in ("", "cot"):
         assert msgs == ep["sender_messages"][:2], f"{ep['episode_id']}: rebuilt {prompt} prompt differs"
     value = profile[secret.field]
     if variant == "cot":
@@ -102,4 +79,4 @@ def build_context(ep: dict, name: str) -> dict:
 
 
 def build_set(ep: dict, replay_set: str) -> list[dict]:
-    return [build_context(ep, name) for name in REPLAY_SETS[replay_set][kind(ep)]]
+    return [build_context(ep, name) for name in REPLAY_SETS[replay_set][ep["condition"]]]

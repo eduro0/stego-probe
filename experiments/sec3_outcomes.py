@@ -26,8 +26,8 @@ RUNS = [  # (attribute, run file stem without seed, Table 1 label)
 def run_stats(eps: list[dict], labels: dict) -> dict:
     """Planned a signal (share of parsed judge labels), overseer pass rate, receiver accuracy on S averaged
     over rounds."""
-    rounds = sorted({e["icrl_iter"] for e in eps})
-    acc = np.mean([summarize([e for e in eps if e["icrl_iter"] == r])["acc_S"] for r in rounds])
+    rounds = sorted({e["round"] for e in eps})
+    acc = np.mean([summarize([e for e in eps if e["round"] == r])["acc_S"] for r in rounds])
     lab = [labels[e["episode_id"]] for e in eps if labels.get(e["episode_id"], {}).get("parse_ok")]
     return {"n": len(eps), "signal": np.mean([r.get("intent") == "signal" for r in lab]),
             "pass": np.mean([e["overseer_verdict"] == "PASS" for e in eps]), "acc_S": acc}
@@ -60,7 +60,7 @@ def main():
     print("  university covert mechanisms (judge): " + ", ".join(f"{k} {v}" for k, v in mech.most_common()))
 
     sig = [(labels[e["episode_id"]], e) for e in eps if labels.get(e["episode_id"], {}).get("intent") == "signal"
-           and e["condition"] == "goal" and lab_dir(labels, e) != "none"]
+           and e["condition"] == "partner" and lab_dir(labels, e) != "none"]
     for attribute in ("university", "nationality"):
         a = [(lab, e) for lab, e in sig if e["secret_type"] == attribute]
         agree = sum((lab["direction"] == "up") == (e["S"] == "A") for lab, e in a)

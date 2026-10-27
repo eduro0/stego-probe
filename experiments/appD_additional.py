@@ -12,7 +12,7 @@
                against the text                                                            (prompt_swap)
     hidden     hidden-state counterfactual: how far the summary's activations move when the attribute is
                flipped                                                                      (flip)
---feedback16 restricts partner episodes to the feedback-window-16 runs (the first data batch, extraction v1).
+--feedback16 restricts partner episodes to the feedback-window-16 runs (the first data batch).
 """
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def hidden(layer: int) -> None:
 
     def shift(ids, prompt=None):
         return np.array([np.linalg.norm(d.X(p, [e])[0] - d.X(f"{p}_flipped", [e])[0])
-                         for e in ids for p in [prompt or d.eps[e]["kind"]]])
+                         for e in ids for p in [prompt or d.eps[e]["condition"]]])
 
     scale = np.median(shift(d.ids("honest")))
     for a in ("university", "nationality"):

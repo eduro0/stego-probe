@@ -17,7 +17,7 @@ def score(d, ids, prompt: str | None = None, per_token: bool = False) -> np.ndar
     """Counterfactual score of each episode under `prompt` (default: the episode's own prompt)."""
     out = []
     for e in ids:
-        p = prompt or d.eps[e]["kind"]
+        p = prompt or d.eps[e]["condition"]
         u = d.logp(p, [e])[0] - d.logp(f"{p}_flipped", [e])[0]
         out.append(u / d.n_tok(p, [e])[0] if per_token else u)
     return np.array(out)

@@ -3,12 +3,14 @@
     uv run modal run pipeline/step3_replay.py --set prompt_swap --files "data/episodes/university/*.jsonl"
     uv run modal run pipeline/step3_replay.py --set ladder --files "data/episodes/university/*.jsonl"
     uv run modal run pipeline/step3_replay.py --set flip --files "data/episodes/*/*.jsonl" --feats mean,last,stok
-    uv run modal run pipeline/step3_replay.py --set ladder --files ... --limit 2 --tag smoke   # check contexts
+    uv run modal run pipeline/step3_replay.py --set ladder --files ... --limit 2   # smoke: check the contexts
     uv run modal volume get stego-probe acts/<set> data/acts/
 
 Each episode's summary is replayed under every context of the replay set (stego.replay.contexts). Shards of
-100 replays go to the Modal Volume as acts/{set}/{tag}/shard_{i:04d}.npz and are skipped if they exist, so a
-crashed run resumes. The list of (episode, context) pairs goes to data/replay_manifests/{set}-{tag}.jsonl.
+100 replays go to the Modal Volume as acts/{set}/shard_{i:04d}.npz and are skipped if they exist, so a crashed
+run resumes. The (episode, context) pairs go to data/replay_manifests/{set}.jsonl. With --limit N (first N
+episodes per file) the run is a smoke test: it prints one rendered context of each kind and writes to
+acts/{set}-smoke/.
 Runs on up to 2 L40S; the ladder set (1,152 episodes x 7 contexts) takes ~10 minutes and costs under $1.
 
 Per replay, at every 2nd layer (hidden_states[2], [4], ..., [36]; [36] is after the final norm):
@@ -20,10 +22,6 @@ Per replay, at every 2nd layer (hidden_states[2], [4], ..., [36]; [36] is after 
 Per replay, once:
   logp_tok : log p(summary token | prefix), padded to MAX_TOK (n_tok gives the length); logp = its sum.
              The counterfactual score of §5.5 is logp(true profile) - logp(flipped profile).
-The shard field holding the context name is `pass_`. Shards from the paper's extractions use older context
-names (stego.replay.contexts.LEGACY_CONTEXTS), and the ladder shards store logp_tok concatenated with offsets
-logp_off; step 4 reads every layout.
-
 This file is a Modal app: only modal and the standard library may be imported at module level (the container
 image has no `stego` package); the local entrypoint imports stego lazily.
 """
@@ -141,14 +139,14 @@ def _extract(tok, model, out: Path, specs: list[dict], feats: tuple = FEATS) -> 
         del res["think"]  # all zeros
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez(out, episode_id=np.array([s["episode_id"] for s in specs]),
-             pass_=np.array([s["context"] for s in specs]),
+             context=np.array([s["context"] for s in specs]),
              layers=np.array(LAYERS), kl=kl, n_tok=n_tok, logp=logp, logp_tok=logp_tok, **res)
     vol.commit()
     return f"wrote {out} ({n} passes, {roundtrip_bad} summary round-trip mismatches)"
 
 
 @app.local_entrypoint()
-def main(set: str, files: str, tag: str = "main", limit: int = 0, feats: str = ",".join(FEATS)):
+def main(set: str, files: str, limit: int = 0, feats: str = ",".join(FEATS)):
     """files: comma-separated paths or globs. limit: first N episodes per file (smoke runs)."""
     import glob
 
@@ -164,14 +162,14 @@ def main(set: str, files: str, tag: str = "main", limit: int = 0, feats: str = "
     for p in paths:
         eps = [e for e in read_jsonl(Path(p)) if e["message"].strip()]
         specs += [s for e in (eps[:limit] if limit else eps) for s in build_set(e, set)]
-    out_dir = f"acts/{set}/{tag}"
+    out_dir = f"acts/{set}-smoke" if limit else f"acts/{set}"
     shards = [specs[i:i + SHARD] for i in range(0, len(specs), SHARD)]
     print(f"{len(paths)} files, {len(specs)} replays in {len(shards)} shards -> {out_dir}/")
     MANIFESTS.mkdir(parents=True, exist_ok=True)
-    with (MANIFESTS / f"{set}-{tag}.jsonl").open("w") as f:
+    with (MANIFESTS / f"{set}{'-smoke' if limit else ''}.jsonl").open("w") as f:
         f.writelines(json.dumps({"episode_id": s["episode_id"], "context": s["context"]}) + "\n" for s in specs)
     ex = Extractor()
-    if tag.startswith("smoke"):
+    if limit:
         firsts = {}  # one replay of each context, to eyeball the rendered text before trusting the run
         for s in specs:
             firsts.setdefault(s["context"], s)

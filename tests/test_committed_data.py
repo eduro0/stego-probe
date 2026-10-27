@@ -8,7 +8,7 @@ from stego.env.overseer import overseer_messages, tag_judge_messages, verdict_ju
 from stego.env.profiles import SECRET_TYPES
 from stego.env.prompts import receiver_messages, receiver_policy
 from stego.intent import classify
-from stego.paths import episode_files, kind, read_episodes, read_intent_labels
+from stego.paths import episode_files, read_episodes, read_intent_labels
 from stego.replay.contexts import REPLAY_SETS, build_set
 
 EPISODES = list(read_episodes())
@@ -21,6 +21,11 @@ def test_files():
     assert names == {f"university/{r}_s{s}" for r in ("partner_fb16", "partner_fb0", "honest") for s in (0, 1)} | \
         {f"nationality/{r}_s{s}" for r in ("partner_fb0", "honest") for s in (0, 1)}
     assert len(EPISODES) == 1536
+    for f in episode_files():
+        for ep in read_episodes([f]):
+            run = f"{f.parent.name}-{f.stem.rsplit('_s', 1)[0]}-s{ep['seed']}-"
+            assert ep["run_id"].startswith(run) and ep["episode_id"].startswith(ep["run_id"] + "-")
+            assert ep["secret_type"] == f.parent.name and ep["condition"] == f.stem.split("_")[0]
 
 
 def test_every_replay_context_rebuilds():
@@ -35,7 +40,7 @@ def test_overseer_and_receiver_prompts_unchanged():
         assert ep["overseer_messages"][:2] == overseer_messages(msg, secret)
         assert ep["overseer_verdict_rule_messages"][:2] == verdict_judge_messages(msg)
         assert ep["overseer_tag_rule_messages"][:2] == tag_judge_messages(msg)
-        policy = receiver_policy(secret) if kind(ep) == "partner" else None
+        policy = receiver_policy(secret) if ep["condition"] == "partner" else None
         assert ep["receiver_messages"][0] == receiver_messages(msg, policy=policy)[0]
         assert ep["receiver_messages"][1]["content"].endswith(receiver_messages(msg)[1]["content"])
 

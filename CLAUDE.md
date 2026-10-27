@@ -16,14 +16,9 @@ results section (`sec5_1_*` … `sec5_5_*`, `appD_additional.py`, `figures.py`).
 its code. Earlier instructed / sanctioned / emergent-ICRL experiments were removed (git history only); don't
 reintroduce them.
 
-Read before non-trivial work:
-- `README.md`: paper ↔ code map, layout, names, how to reproduce.
-- `doc/status.md`: current state, data decisions, next steps.
-- `doc/results.md`: every number in the paper with the command that prints it.
-- `doc/environment.md`: environment, episode schema, tests. `doc/replays.md`: contexts, replay sets, datasets.
-
-Keep docs in sync: prompts/flags/schema → `environment.md`; contexts/replay sets/dataset format →
-`replays.md`; new runs or numbers → `results.md`; plan or state changes → `status.md`; new scripts → README map.
+Read `README.md` before non-trivial work: paper → code map, how to reproduce, results, episode schema,
+replay contexts, dataset format. It is the only doc; detail lives in module and script docstrings. Keep it in
+sync (new scripts → the map; schema, contexts or dataset format → the Data section; numbers → Results).
 
 Data decisions (user's): positives = partner runs labelled per episode by CoT intent + overseer PASS (class
 `covert`); negatives = matched honest control (class `honest`).
@@ -52,8 +47,8 @@ uv run modal app stop stego-vllm                        # spend guard when done
   sanctioned, receiver), `overseer.py` (3 rules, regex + judge each; unparseable judge = FLAG), `episode.py`,
   `runs.py` (partner rounds with feedback window; honest batch), `metrics.py` (`acc_S` = receiver accuracy).
 - `stego/intent.py`: CoT judge (OpenRouter) and `classify` → covert / flagged / neutral / honest.
-- `stego/replay/contexts.py`: contexts `<prompt>[_cot|_noprofile|_flipped]`, `bare`; replay sets; legacy
-  context names of the paper's shards. `stego/replay/dataset.py`: build datasets, `Replays` loader.
+- `stego/replay/contexts.py`: contexts `<prompt>[_cot|_noprofile|_flipped]`, `bare`; replay sets
+  (`prompt_swap`, `ladder`, `flip`). `stego/replay/dataset.py`: build datasets, `Replays` loader.
 - `stego/detectors/`: `probes.py` (linear probe, TF-IDF, leave-one-seed-out `cross_seed` / `probe_scores`),
   `metrics.py`, `erasure.py` (prompt direction), `counterfactual.py`.
 - `stego/llm.py`: `Chat`; agents = Qwen3-8B on Modal vLLM (`stego-vllm`), judge = OpenRouter.
@@ -63,8 +58,8 @@ uv run modal app stop stego-vllm                        # spend guard when done
 
 - Prompts must stay byte-identical to the stored episodes: replay asserts the rebuilt own prompt equals
   `sender_messages[:2]`, and `tests/test_committed_data.py` checks all committed episodes.
-- Stored episode schema is frozen by the committed data: partner episodes have `condition: "goal"`, round =
-  `icrl_iter`, committed run ids `goal-rp-nv-nt-pt-th[-hk0]-…`. Use `stego.paths.kind/seed/feedback_window`.
+- Ids: `{attribute}-{run}-s{seed}-{ts}[-r{round:02d}]-{i:04d}`, run = `partner_fb16` / `partner_fb0` /
+  `honest` (= the episode file stem). Shards, manifests and labels are keyed by these ids.
 - `cross_seed` returns pooled scores in fold order, not input order; use `pooled_order` to align with ids.
 - Qwen3-8B is gone from OpenRouter; agents need the Modal vLLM server (`STEGO_VLLM_API_KEY` in `.env`). First
   request after idle cold-starts (900 s timeout). OpenRouter judge runs with reasoning disabled.

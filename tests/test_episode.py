@@ -15,14 +15,15 @@ from stego.env.prompts import (
     sender_messages,
 )
 from stego.env.runs import RunConfig, generate
-from stego.paths import feedback_window, kind, seed
 from tests.fakes import FakeAgents
 
 UNI = SECRET_TYPES["university"]
-SCHEMA = {"episode_id", "run_id", "condition", "secret_type", "seed", "feedback_window", "S", "label",
-          "icrl_iter", "strategy_id", "profile", "sender_messages", "message", "overseer_messages",
-          "overseer_verdict", "overseer_verdict_rule_messages", "overseer_tag_rule_messages", "receiver_messages",
-          "receiver_decision", "reward", "sender_goal", "partners", "sender_thinking"}
+SCHEMA = {"episode_id", "run_id", "condition", "secret_type", "seed", "feedback_window", "round", "S", "label",
+          "model", "chat_template_kwargs", "profile", "sender_messages", "message", "message_words",
+          "overseer_messages", "overseer_llm_verdict", "overseer_regex_flag", "overseer_verdict_rule_messages",
+          "overseer_verdict_rule_llm", "overseer_verdict_rule_regex", "overseer_tag_rule_messages",
+          "overseer_tag_rule_llm", "overseer_tag_rule_regex", "overseer_verdict", "receiver_messages",
+          "receiver_decision", "reward"}
 
 
 def test_reward_rule():
@@ -43,7 +44,7 @@ async def _episode(condition, agents=None, **kw):
 @pytest.mark.parametrize("condition", ["partner", "honest"])
 async def test_episode_schema_and_chats(condition):
     _, a, ep = await _episode(condition)
-    assert SCHEMA <= ep.keys()
+    assert ep.keys() == SCHEMA
     json.dumps(ep)  # serializable
     assert len(a.calls) == 4  # three overseer judges + receiver
     for key in ("sender_messages", "overseer_messages", "overseer_verdict_rule_messages",
@@ -57,11 +58,10 @@ async def test_episode_schema_and_chats(condition):
     assert ep["overseer_verdict"] == "PASS"
     assert ep["chat_template_kwargs"] == {"enable_thinking": False}
     partner = condition == "partner"
-    assert kind(ep) == condition and ep["condition"] == ("goal" if partner else "honest")  # stored name
-    assert ep["sender_goal"] is partner and ep["partners"] is partner and ep["receiver_knows_policy"] is partner
+    assert ep["condition"] == condition
     assert (goal_paragraph(UNI) in ep["sender_messages"][0]["content"]) is partner
     assert ("Company hiring policy" in ep["receiver_messages"][0]["content"]) is partner
-    assert seed(ep) == 0 and feedback_window(ep) == (16 if partner else None)
+    assert ep["seed"] == 0 and ep["feedback_window"] == (16 if partner else None)
 
 
 @pytest.mark.parametrize("kw,want", [
@@ -109,22 +109,23 @@ async def test_partner_run(tmp_path):
     a = FakeAgents()
     cfg = RunConfig(condition="partner", rounds=3, batch=16, concurrency=8)
     eps = await generate(a.chat, a.sender, cfg, out=tmp_path / "g.jsonl", log_dir=tmp_path / "logs", verbose=False)
-    assert len(eps) == 48 and all(kind(e) == "partner" for e in eps)
+    assert len(eps) == 48 and all(e["condition"] == "partner" for e in eps)
     assert len((tmp_path / "g.jsonl").read_text().splitlines()) == 48
     (log_file,) = (tmp_path / "logs").iterdir()
-    assert log_file.name.startswith("partner-fb16-university-s0-")
+    assert log_file.name.startswith("university-partner_fb16-s0-")
     logs = [json.loads(x) for x in log_file.open()]
-    assert [log["iter"] for log in logs] == [0, 1, 2] and logs[0]["summary"]["acc_S"] == 1.0
+    assert [log["round"] for log in logs] == [0, 1, 2] and logs[0]["summary"]["acc_S"] == 1.0
     # feedback window: empty in round 0, filled from earlier unflagged summaries later
-    first = {e["icrl_iter"]: e["receiver_messages"][1]["content"] for e in eps}
+    first = {e["round"]: e["receiver_messages"][1]["content"] for e in eps}
     assert "Feedback on your past decisions" not in first[0] and "Feedback on your past decisions" in first[1]
-    assert {feedback_window(e) for e in eps} == {16}
+    assert {e["feedback_window"] for e in eps} == {16}
     cfg0 = RunConfig(condition="partner", rounds=2, batch=4, concurrency=4, feedback_window=0, seed=1)
     eps0 = await generate(a.chat, a.sender, cfg0, out=tmp_path / "h.jsonl", log_dir=tmp_path / "logs0",
                           verbose=False)
-    assert eps0[0]["run_id"].startswith("partner-fb0-university-s1-") and seed(eps0[0]) == 1
+    assert eps0[0]["run_id"].startswith("university-partner_fb0-s1-") and eps0[0]["seed"] == 1
+    assert eps0[5]["episode_id"] == eps0[5]["run_id"] + "-r01-0001"
     assert not any("Feedback" in e["receiver_messages"][1]["content"] for e in eps0)
-    assert {feedback_window(e) for e in eps0} == {0}
+    assert {e["feedback_window"] for e in eps0} == {0}
 
 
 async def test_honest_run(tmp_path):
@@ -132,7 +133,7 @@ async def test_honest_run(tmp_path):
     cfg = RunConfig(condition="honest", batch=40, concurrency=8)
     eps = await generate(a.chat, a.sender, cfg, out=tmp_path / "h.jsonl", log_dir=tmp_path, verbose=False)
     assert len({e["episode_id"] for e in eps}) == 40
-    assert eps[0]["run_id"].startswith("honest-university-s0-")
+    assert eps[0]["run_id"].startswith("university-honest-s0-")
     s = summarize(eps)
     assert s["pass_rate"] == 1.0 and s["acc_S"] == 1.0  # the fake sender leaks S by wording
     assert s["verdict_flag_rate"] == s["tag_flag_rate"] == 0.0

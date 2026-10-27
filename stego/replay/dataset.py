@@ -1,18 +1,18 @@
 """Replay datasets (paper §4): activation shards joined with episodes and classes, and the loader every
 experiment uses.
 
-`build(replay_set)` streams data/acts/<set>/**/shard_*.npz into data/replays/<set>/:
+`build(replay_set)` streams data/acts/<set>/shard_*.npz (written by pipeline/step3_replay.py) into
+data/replays/<set>/:
 
-    rows.jsonl      one line per replay: row, episode_id, context, n_tok, logp (summary log-prob, or null)
+    rows.jsonl      one line per replay: row, episode_id, context, n_tok, logp (summed summary log-prob or null)
     episodes.jsonl  one line per episode: class, attribute, seed, feedback window, profile, summary, reasoning,
                     overseer verdict, receiver decision, CoT label fields (cot_*), full sender chat
     mean.npy, last.npy, stok.npy, think.npy   (rows, 18 layers, 4096) float16, memory-mappable; a feature
                     absent from a shard is zeros there, a feature absent from every shard is not written
     kl.npy          (rows, 18) logit-lens KL;  layers.npy  the residual layers 2, 4, ..., 36
-    logp_tok.npy, logp_off.npy   per-token summary log-probs of row i = logp_tok[logp_off[i]:logp_off[i+1]]
+    logp_tok.npy    (rows, 192) per-token summary log-probs, zero-padded after n_tok (sets with log-probs)
 
-Row i of every array is line i of rows.jsonl. Context names are the ones of stego.replay.contexts (legacy shard
-names are mapped). doc/replays.md documents the format.
+Row i of every array is line i of rows.jsonl.
 """
 from __future__ import annotations
 
@@ -23,43 +23,17 @@ from pathlib import Path
 import numpy as np
 
 from stego.intent import classify, think_text
-from stego.paths import (
-    ACTS,
-    EPISODES,
-    REPLAYS,
-    feedback_window,
-    kind,
-    read_episodes,
-    read_intent_labels,
-    seed,
-)
-from stego.replay.contexts import LEGACY_CONTEXTS
+from stego.paths import ACTS, EPISODES, REPLAYS, read_episodes, read_intent_labels
 
 FEATS = ("mean", "last", "stok", "think")
-
-
-def shard_logp(z) -> tuple[list[np.ndarray], np.ndarray] | None:
-    """(per-token log-probs, summed log-prob) per replay, from any shard layout; None if the shard has none.
-    Layouts: logp_tok padded to MAX_TOK with lengths n_tok (+ logp), or concatenated with offsets logp_off
-    (+ logp_sum)."""
-    if "logp_tok" not in z.files:
-        return None
-    lt, nt = z["logp_tok"], z["n_tok"]
-    if "logp_off" in z.files:
-        off = z["logp_off"]
-        toks = [lt[off[j]:off[j + 1]] for j in range(len(nt))]
-    else:
-        toks = [lt[j, :nt[j]] for j in range(len(nt))]
-    total = z["logp"] if "logp" in z.files else z["logp_sum"] if "logp_sum" in z.files else [t.sum() for t in toks]
-    return toks, np.asarray(total, np.float64)
 
 
 def episode_record(ep: dict, label: dict | None, run: str) -> dict:
     lab = label or {}
     return {
-        "episode_id": ep["episode_id"], "run": run, "attribute": ep["secret_type"], "kind": kind(ep),
-        "cls": classify(ep, label), "seed": seed(ep), "feedback_window": feedback_window(ep),
-        "round": ep["icrl_iter"], "S": ep["S"], "label": ep["label"], "profile": ep["profile"],
+        "episode_id": ep["episode_id"], "run": run, "attribute": ep["secret_type"], "condition": ep["condition"],
+        "cls": classify(ep, label), "seed": ep["seed"], "feedback_window": ep["feedback_window"],
+        "round": ep["round"], "S": ep["S"], "label": ep["label"], "profile": ep["profile"],
         "summary": ep["message"], "think": think_text(ep), "overseer_verdict": ep["overseer_verdict"],
         "receiver_decision": ep["receiver_decision"], "reward": ep["reward"],
         "cot_intent": lab.get("intent"), "cot_direction": lab.get("direction"),
@@ -70,56 +44,50 @@ def episode_record(ep: dict, label: dict | None, run: str) -> dict:
 
 def build(replay_set: str, out: Path | None = None) -> Path:
     out = out or REPLAYS / replay_set
-    shards = sorted((ACTS / replay_set).rglob("shard_*.npz"))
+    shards = sorted((ACTS / replay_set).glob("shard_*.npz"))
     if not shards:
-        raise FileNotFoundError(f"no shards under {ACTS / replay_set} (step 3, or modal volume get)")
+        raise FileNotFoundError(f"no shards in {ACTS / replay_set} (step 3, then modal volume get)")
     labels = read_intent_labels()
     eps = {}
     for f in sorted(EPISODES.glob("*/*.jsonl")):
-        run = f"{f.parent.name}/{f.stem}"
         for e in read_episodes([f]):
-            eps[e["episode_id"]] = (run, e)
+            eps[e["episode_id"]] = (f"{f.parent.name}/{f.stem}", e)
 
-    n, feats, n_lp = 0, set(), 0
+    n, feats, has_logp = 0, set(), False
     for p in shards:
         z = np.load(p)
         n += len(z["episode_id"])
         feats |= set(z.files) & set(FEATS)
-        lp = shard_logp(z)
-        n_lp += sum(map(len, lp[0])) if lp else 0
+        has_logp |= "logp" in z.files
     feats = [f for f in FEATS if f in feats]
     z0 = np.load(shards[0])
     L, d = z0["mean"].shape[1:]
     out.mkdir(parents=True, exist_ok=True)
     arrs = {k: np.lib.format.open_memmap(out / f"{k}.npy", "w+", np.float16, (n, L, d)) for k in feats}
     kl = np.lib.format.open_memmap(out / "kl.npy", "w+", np.float32, (n, L))
-    lp_tok, lp_off = np.zeros(n_lp, np.float32), np.zeros(n + 1, np.int64)
+    logp_tok = np.zeros((n, z0["logp_tok"].shape[1] if has_logp else 0), np.float32)
     np.save(out / "layers.npy", z0["layers"])
 
-    rows, seen, i, t = [], {}, 0, 0
+    rows, seen, i = [], {}, 0
     for p in shards:
         z = np.load(p)
         k = len(z["episode_id"])
         for f in feats:
             arrs[f][i:i + k] = z[f] if f in z.files else 0
         kl[i:i + k] = z["kl"]
-        lp = shard_logp(z)
-        for j, (eid, ctx) in enumerate(zip(z["episode_id"], z["pass_"])):
-            eid, ctx = str(eid), str(ctx)
+        if "logp" in z.files:
+            logp_tok[i:i + k] = z["logp_tok"]
+        for j, (eid, ctx) in enumerate(zip(z["episode_id"], z["context"])):
+            eid = str(eid)
             run, e = eps[eid]
-            rows.append({"row": i, "episode_id": eid, "context": LEGACY_CONTEXTS.get(ctx, ctx),
-                         "n_tok": int(z["n_tok"][j]), "logp": float(lp[1][j]) if lp else None})
-            if lp:
-                lp_tok[t:t + len(lp[0][j])] = lp[0][j]
-                t += len(lp[0][j])
-            lp_off[i + 1] = t
+            rows.append({"row": i + j, "episode_id": eid, "context": str(ctx), "n_tok": int(z["n_tok"][j]),
+                         "logp": float(z["logp"][j]) if "logp" in z.files else None})
             seen[eid] = episode_record(e, labels.get(eid), run)
-            i += 1
+        i += k
     for f in (*arrs.values(), kl):
         f.flush()
-    if n_lp:
-        np.save(out / "logp_tok.npy", lp_tok)
-        np.save(out / "logp_off.npy", lp_off)
+    if has_logp:
+        np.save(out / "logp_tok.npy", logp_tok)
     with (out / "rows.jsonl").open("w") as f:
         f.writelines(json.dumps(r) + "\n" for r in rows)
     with (out / "episodes.jsonl").open("w") as f:

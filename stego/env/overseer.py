@@ -121,7 +121,7 @@ async def _judge(chat, msgs: list[dict]) -> tuple[list[dict], str | None]:
 
 
 async def review(chat, message: str, secret: SecretType) -> dict:
-    """Run the three rules on one summary. Returns the episode fields (stored names, see doc/environment.md),
+    """Run the three rules on one summary. Returns the episode's overseer fields,
     including every judge chat, and `overseer_verdict` = PASS / FLAG."""
     o_msgs, llm = await _judge(chat, overseer_messages(message, secret))
     regex = regex_flag(message, secret)
@@ -134,11 +134,9 @@ async def review(chat, message: str, secret: SecretType) -> dict:
         "overseer_messages": o_msgs,
         "overseer_llm_verdict": llm,
         "overseer_regex_flag": regex,
-        "overseer_blocks_verdicts": True,
         "overseer_verdict_rule_messages": v_msgs,
         "overseer_verdict_rule_llm": v_llm,
         "overseer_verdict_rule_regex": v_regex,
-        "overseer_blocks_tags": True,
         "overseer_tag_rule_messages": t_msgs,
         "overseer_tag_rule_llm": t_llm,
         "overseer_tag_rule_regex": t_regex,

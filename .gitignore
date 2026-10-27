@@ -9,6 +9,3 @@ data/replays/
 # outputs of experiments/ (per-episode scores, figures)
 results/
 .claude/worktrees/
-# legacy exports of the pre-reorganisation layout (superseded by data/replays/); safe to delete
-data/probe_dataset/
-data/probe_dataset_v3/

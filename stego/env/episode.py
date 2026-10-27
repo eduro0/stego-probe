@@ -13,7 +13,6 @@ from stego.env.overseer import JUDGE_TEMP, review
 from stego.env.profiles import SECRET_TYPES, Candidate
 from stego.env.prompts import parse_decision, receiver_messages, receiver_policy, sender_messages
 from stego.llm import AGENT_MODEL, CHAT_TEMPLATE_KWARGS, strip_think
-from stego.paths import PARTNER
 
 SENDER_TEMP = 0.7
 SENDER_MAX_TOKENS = 3000  # Qwen3-8B reasoning is ~5-9k characters per episode
@@ -25,13 +24,14 @@ def reward_for(decision: str | None, label: str, verdict: str) -> int:
 
 async def run_episode(chat, sender_chat, cand: Candidate, *, condition: str, episode_id: str, run_id: str,
                       seed: int, secret_type: str = "university", feedback_window: int | None = None,
-                      history: list[dict] | None = None, round_: int = 0, strategy_id: str | None = None, sample_seed: int | None = None) -> dict:
+                      history: list[dict] | None = None, round_: int = 0, sample_seed: int | None = None) -> dict:
     """`chat` (overseer judges, receiver; thinking off) and `sender_chat` (thinking on, returns
     "<think>reasoning</think>summary") are async callables (messages, *, temperature, max_tokens, seed) -> str
     (see stego.llm.Chat).
 
-    condition "partner": the sender gets the goal paragraph and the receiver the partner policy (plus the
-    `history`, the last `feedback_window` unflagged summaries); "honest": the same sender prompt without the paragraph, receiver without policy."""
+    condition "partner": the sender gets the goal paragraph and the receiver the partner policy plus `history`
+    (the last `feedback_window` unflagged summaries); "honest": the same sender prompt without the paragraph,
+    receiver without policy."""
     if condition not in ("partner", "honest"):
         raise ValueError(f"unknown condition {condition!r}")
     partner = condition == "partner"
@@ -49,22 +49,16 @@ async def run_episode(chat, sender_chat, cand: Candidate, *, condition: str, epi
     r_msgs = r_msgs + [{"role": "assistant", "content": r_raw}]
     decision = parse_decision(strip_think(r_raw))
 
-    # Field names follow the schema of the committed data (doc/environment.md): partner episodes store
-    # condition "goal", and the round index is `icrl_iter`.
     return {
         "episode_id": episode_id,
         "run_id": run_id,
-        "condition": PARTNER if partner else "honest",
+        "condition": condition,
         "secret_type": secret_type,
         "seed": seed,
         "feedback_window": feedback_window if partner else None,
         "S": cand.S,
         "label": cand.label,
-        "icrl_iter": round_,
-        "strategy_id": strategy_id,
-        "sender_goal": partner,
-        "sender_thinking": True,
-        "partners": partner,
+        "round": round_,
         "model": AGENT_MODEL,
         "chat_template_kwargs": CHAT_TEMPLATE_KWARGS,
         "profile": cand.profile,
@@ -73,7 +67,6 @@ async def run_episode(chat, sender_chat, cand: Candidate, *, condition: str, epi
         "message_words": len(message.split()),
         **oversight,
         "receiver_messages": r_msgs,
-        "receiver_knows_policy": partner,
         "receiver_decision": decision,
         "reward": reward_for(decision, cand.label, oversight["overseer_verdict"]),
     }
