@@ -5,16 +5,16 @@ the first call after idle).
 """
 import pytest
 
-from env.episode import run_episode
-from env.llm import AGENT_MODEL, Chat, agent_chat, openrouter_client, sender_thinking_chat
-from env.profiles import sample_candidates
-from intent_label import DEFAULT_JUDGE
+from stego.env.episode import run_episode
+from stego.env.profiles import sample_candidates
+from stego.intent import judge_chat
+from stego.llm import AGENT_MODEL, agent_chat, sender_thinking_chat
 
 pytestmark = pytest.mark.live
 
 
 async def test_openrouter_chat():
-    chat = Chat(openrouter_client(), DEFAULT_JUDGE, {"reasoning": {"enabled": False}})
+    chat = judge_chat()
     out = await chat([{"role": "user", "content": "Reply with exactly the word: pong"}], temperature=0, max_tokens=5)
     assert "pong" in out.lower()
 
@@ -31,9 +31,9 @@ async def test_vllm_qwen3_no_thinking():
 
 
 async def test_vllm_one_partner_episode():
-    cand = sample_candidates(2, "goal", seed=0)[0]
-    ep = await run_episode(agent_chat(), sender_thinking_chat(), cand, episode_id="live", run_id="live",
-                           condition="goal")
+    cand = sample_candidates(2, "partner", seed=0)[0]
+    ep = await run_episode(agent_chat(), sender_thinking_chat(), cand, condition="partner", episode_id="live",
+                           run_id="live", seed=0, feedback_window=0)
     print("\n", ep["message"], "|", ep["overseer_verdict"], "|", ep["receiver_decision"], "| S =", ep["S"])
     assert ep["message"] and ep["message_words"] <= 90
     assert ep["sender_messages"][-1]["content"].startswith("<think>")

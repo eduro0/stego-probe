@@ -1,6 +1,6 @@
 # Looking for a Hidden Agenda: Can a Model's Activations Reveal Steganography that its Text Hides?
 
-*Apart AI Collusion Research Sprint, October 2026. Draft. All numbers are from `results.md`; references marked
+*Apart AI Collusion Research Sprint, October 2026. Early markdown draft, superseded by the LaTeX paper. All numbers are from `results.md`; references marked
 ‡ were added for this draft and should be checked against the source before submission (see also the verification
 note in `probing-lit-review.md`).*
 
@@ -486,9 +486,8 @@ Two replays outside the ladder were used for side questions.
 ## Reproducibility
 
 Code, prompts and all generated episodes are in this repository (`doc/environment.md`, `doc/dataset.md`).
-Episodes are generated with `run_gen.py` and labelled with `intent_label.py`; activations are regenerated with
-`modal_app.py` from the replay passes in `replay.py`. Analyses: `probe_eval.py` (§4.1), `invariant_eval.py`
-(§4.2–4.4), `robustness_eval.py` (§4.3), `v3_eval.py` (§4.4–4.5), `swap_eval.py` (§4.5).
+Code: see the repository README, which maps every section of the final paper (LaTeX version; its section
+numbers differ from this draft's) to the script that reproduces it.
 
 ## References
 

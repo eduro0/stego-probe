@@ -3,8 +3,12 @@
 __pycache__/
 .pytest_cache/
 .ruff_cache/
-# activations: GBs of .npy/.npz, regenerate with modal_app.py / build_dataset.py (see doc/dataset.md)
+# activations and the datasets built from them: GBs of .npz/.npy, regenerate with pipeline/ steps 3-4
 data/acts/
+data/replays/
+# outputs of experiments/ (per-episode scores, figures)
+results/
+.claude/worktrees/
+# legacy exports of the pre-reorganisation layout (superseded by data/replays/); safe to delete
 data/probe_dataset/
 data/probe_dataset_v3/
-.claude/worktrees/

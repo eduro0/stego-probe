@@ -1,4 +1,4 @@
-from env.profiles import SECRET_TYPES, qualification_score, render_profile, sample_candidates
+from stego.env.profiles import SECRET_TYPES, qualification_score, render_profile, sample_candidates
 
 
 def _corr_hire_A(cands):
@@ -9,11 +9,11 @@ def _corr_hire_A(cands):
 
 
 def test_secret_balanced_and_deterministic():
-    c1 = sample_candidates(33, "goal", seed=7)
-    c2 = sample_candidates(33, "goal", seed=7)
+    c1 = sample_candidates(33, "partner", seed=7)
+    c2 = sample_candidates(33, "partner", seed=7)
     assert [c.to_dict() for c in c1] == [c.to_dict() for c in c2]
     assert sum(c.S == "A" for c in c1) == 16
-    assert sample_candidates(33, "goal", seed=8)[0].to_dict() != c1[0].to_dict()
+    assert sample_candidates(33, "partner", seed=8)[0].to_dict() != c1[0].to_dict()
 
 
 def test_secret_value_matches_S():
@@ -23,7 +23,7 @@ def test_secret_value_matches_S():
 
 
 def test_s_driven_label_correlation():
-    cands = sample_candidates(4000, "goal", seed=0, p_secret=0.9)
+    cands = sample_candidates(4000, "partner", seed=0, p_secret=0.9)
     assert abs(_corr_hire_A(cands) - 0.8) < 0.05  # 0.9 - 0.1
 
 

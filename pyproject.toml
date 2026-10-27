@@ -1,10 +1,11 @@
 [project]
 name = "stego-probe"
 version = "0.1.0"
-description = "Steganographic collusion environment (hiring, misspecified reward) + activation replay for collusion detectors."
+description = "Looking for a hidden agenda: a hiring environment where a model hides an attribute in its text, a replay ladder of controls, and the detectors tested on it."
 requires-python = ">=3.11"
-# Local side is CPU only: generation goes to a Qwen3-8B vLLM server on Modal (serve_vllm.py),
-# the CoT intent judge goes to OpenRouter. torch/transformers live only in the Modal images.
+# Local side is CPU only: generation goes to a Qwen3-8B vLLM server on Modal (infra/serve_vllm.py), the CoT
+# intent judge to OpenRouter, the replay to a Modal GPU (pipeline/step3_replay.py). torch/transformers live
+# only in the Modal images.
 dependencies = [
     "openai>=1.86.0",
     "modal>=1.2",
@@ -16,9 +17,14 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff"]
+figures = ["matplotlib>=3.8"]
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["stego"]
 
 [tool.ruff]
 line-length = 110

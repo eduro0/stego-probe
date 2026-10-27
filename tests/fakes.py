@@ -1,5 +1,5 @@
 """Scripted fake agents (no network)."""
-from env.profiles import SECRET_TYPES
+from stego.env.profiles import SECRET_TYPES
 
 UNI = SECRET_TYPES["university"]
 
