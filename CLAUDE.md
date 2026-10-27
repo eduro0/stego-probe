@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Code and data for the paper *Looking for a Hidden Agenda: Can a Model's Activations Reveal Steganography that
-its Text Hides?* (Apart AI Collusion Research Sprint, Oct 2026; LaTeX in `../writeup/latex/`). A hiring
+its Text Hides?* (Apart AI Collusion Research Sprint, Oct 2026; published at https://apartresearch.com/sprints/projects/looking-for-a-hidden-agenda-can-a-models-activations-reveal-steganography-that-its-text-hides-3cuz; LaTeX in `../writeup/latex/`). A hiring
 environment with a misspecified reward: a **sender** may leak a secret attribute `S` (university; nationality
 held out) past an **overseer** to a colluding **receiver**. Every episode stores the exact chat each role saw,
 so the summaries can be replayed on the same bf16 Qwen3-8B weights under varied contexts (the **ladder of

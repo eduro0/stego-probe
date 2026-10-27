@@ -1,7 +1,8 @@
 # Looking for a Hidden Agenda
 
-Code and data for *Looking for a Hidden Agenda: Can a Model's Activations Reveal Steganography that its Text
-Hides?* (Eduard Rodriguez Lopez, Apart Research AI Collusion Research Sprint, October 2026).
+Code and data for *[Looking for a Hidden Agenda: Can a Model's Activations Reveal Steganography that its Text
+Hides?](https://apartresearch.com/sprints/projects/looking-for-a-hidden-agenda-can-a-models-activations-reveal-steganography-that-its-text-hides-3cuz)*
+(Eduard Rodriguez Lopez, Apart Research AI Collusion Research Sprint, October 2026).
 
 A Qwen3-8B sender summarizes job candidates for a hiring manager and is given a reason to signal each
 candidate's university past an overseer that blocks any mention of it. It invents its own concealment (which
@@ -197,3 +198,16 @@ with the same seed share profiles, hence seed splits.
 - A third attribute (gender with neutral names, or age bracket).
 - Per-token counterfactual scores (`logp_tok`): are the high-scoring tokens the planned signal words?
 - A sender trained on its partner behaviour with no goal in the prompt, then the same ladder.
+
+## Citation
+
+```bibtex
+@misc{rodriguezlopez2026hiddenagenda,
+  title        = {Looking for a Hidden Agenda: Can a Model's Activations Reveal Steganography that its Text Hides?},
+  author       = {Rodriguez Lopez, Eduard},
+  year         = {2026},
+  month        = oct,
+  howpublished = {Apart Research AI Collusion Research Sprint},
+  url          = {https://apartresearch.com/sprints/projects/looking-for-a-hidden-agenda-can-a-models-activations-reveal-steganography-that-its-text-hides-3cuz}
+}
+```
