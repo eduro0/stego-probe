@@ -17,21 +17,21 @@ The repository follows the paper: `stego/` is the library, `pipeline/` produces 
 
 ## Paper → code
 
-| Paper | What | Library | Run |
-|---|---|---|---|
-| §3.2, Fig. 1a, App. B | environment: profiles, sender / overseer / receiver prompts, episode, reward | `stego/env/` | `pipeline/step1_generate.py` |
-| §3.3, Table 1 | partner runs (feedback window 16 or 0) and the matched honest runs | `stego/env/runs.py` | `experiments/sec3_outcomes.py` |
-| §3.4, Fig. 1b | intent labels from the reasoning → covert / flagged / neutral / honest | `stego/intent.py` | `pipeline/step2_label_intent.py` |
-| §3.5, Fig. 2 | teacher-forced replay under varied contexts | `stego/replay/contexts.py` | `pipeline/step3_replay.py` (Modal GPU) |
-| §4 | replay datasets; linear probe, text baselines, seed splits, AUROC, recall at FPR | `stego/replay/dataset.py`, `stego/detectors/` | `pipeline/step4_build_datasets.py` |
-| §5.1, Fig. 3a | **R1** prompt swap: the naive intent probe reads the prompt | | `experiments/sec5_1_prompt_swap.py` |
-| §5.2, Fig. 3b, Table 4 | **fix**: erase one prompt direction | `stego/detectors/erasure.py` | `experiments/sec5_2_erase_prompt.py` |
-| §5.3, Tables 2, 7 | **R2** the cleaned probe ties the same model reading the bare summary | | `experiments/sec5_3_bare_text.py` |
-| §5.4, Table 3 | **R3** apparent hidden knowledge of the university is in the text | | `experiments/sec5_4_context_removal.py` |
-| §5.5, Fig. 4, Table 5 | counterfactual test: does the summary depend on the attribute? | `stego/detectors/counterfactual.py` | `experiments/sec5_5_counterfactual.py` |
-| Figs. 3-5 | figures | | `experiments/figures.py` |
-| App. D | layers and positions, concealment direction, plan at `</think>`, hidden-state counterfactual | | `experiments/appD_additional.py` |
-| App. C | emergent collusion under in-context RL | removed; git history before `b68343b` | |
+| Paper | What | Code |
+|---|---|---|
+| §3.2, Fig. 1a, App. B | environment: profiles, sender / overseer / receiver prompts, episode, reward | `stego/env/`<br>`pipeline/step1_generate.py` |
+| §3.3, Table 1 | partner runs (feedback window 16 or 0) and the matched honest runs | `stego/env/runs.py`<br>`experiments/sec3_outcomes.py` |
+| §3.4, Fig. 1b | intent labels from the reasoning → covert / flagged / neutral / honest | `stego/intent.py`<br>`pipeline/step2_label_intent.py` |
+| §3.5, Fig. 2 | teacher-forced replay under varied contexts | `stego/replay/contexts.py`<br>`pipeline/step3_replay.py`<br>(Modal GPU) |
+| §4 | replay datasets; linear probe, text baselines, seed splits, AUROC, recall at FPR | `stego/replay/dataset.py`<br>`stego/detectors/`<br>`pipeline/step4_build_datasets.py` |
+| §5.1, Fig. 3a | **R1** prompt swap: the naive intent probe reads the prompt | `experiments/sec5_1_prompt_swap.py` |
+| §5.2, Fig. 3b, Table 4 | **fix**: erase one prompt direction | `stego/detectors/erasure.py`<br>`experiments/sec5_2_erase_prompt.py` |
+| §5.3, Tables 2, 7 | **R2** the cleaned probe ties the same model reading the bare summary | `experiments/sec5_3_bare_text.py` |
+| §5.4, Table 3 | **R3** apparent hidden knowledge of the university is in the text | `experiments/sec5_4_context_removal.py` |
+| §5.5, Fig. 4, Table 5 | counterfactual test: does the summary depend on the attribute? | `stego/detectors/counterfactual.py`<br>`experiments/sec5_5_counterfactual.py` |
+| Figs. 3-5 | figures | `experiments/figures.py` |
+| App. D | layers and positions, concealment direction, plan at `</think>`, hidden-state counterfactual | `experiments/appD_additional.py` |
+| App. C | emergent collusion under in-context RL | removed; git history before `b68343b` |
 
 ```
 stego/
